@@ -17,6 +17,8 @@ from app.analyzers.merchant_normalizer import MerchantNormalizer
 from app.analyzers.anomaly_detector import AnomalyDetector
 from app.analyzers.forecast_engine import ForecastEngine
 from app.analyzers.investment_analyzer import InvestmentAnalyzer
+from app.analyzers.transfer_detector import TransferDetector
+from app.analyzers.budget_tracker import BudgetTracker
 from typing import Optional
 
 try:
@@ -547,6 +549,155 @@ async def get_asset_allocation():
         return allocation
     except Exception as e:
         logger.exception("Failed to get asset allocation")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/admin/detect-transfers')
+async def detect_transfers():
+    """Detect and analyze transfers between accounts."""
+    try:
+        detector = TransferDetector(indexer.engine)
+        transfers = detector.detect_transfers()
+        detector.save_transfers(transfers)
+        detector.update_transaction_transfer_flags()
+        
+        summary = detector.get_transfer_summary()
+        
+        logger.info(f"Detected {len(transfers)} transfers")
+        return {
+            'transfers': transfers,
+            'summary': summary,
+            'status': 'success'
+        }
+    except Exception as e:
+        logger.exception("Transfer detection failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/transfers')
+async def get_transfers(limit: int = 100):
+    """Get detected transfers."""
+    try:
+        detector = TransferDetector(indexer.engine)
+        transfers = detector.get_transfers(limit)
+        summary = detector.get_transfer_summary()
+        
+        return {
+            'transfers': transfers,
+            'summary': summary
+        }
+    except Exception as e:
+        logger.exception("Failed to get transfers")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/transfers/cash-flow')
+async def get_net_cash_flow(account_name: str = None, exclude_transfers: bool = True):
+    """Get net cash flow excluding transfers."""
+    try:
+        detector = TransferDetector(indexer.engine)
+        cash_flow = detector.calculate_net_cash_flow(account_name, exclude_transfers)
+        
+        return cash_flow
+    except Exception as e:
+        logger.exception("Failed to get net cash flow")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/budgets/suggestions')
+async def get_budget_suggestions(period: str = 'monthly'):
+    """Get AI-powered budget suggestions based on historical spending."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        tracker.create_budget_tables()
+        suggestions = tracker.suggest_budgets(period)
+        
+        return {'suggestions': suggestions}
+    except Exception as e:
+        logger.exception("Failed to get budget suggestions")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/budgets')
+async def create_budget(budget_data: dict):
+    """Create a new budget."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        tracker.create_budget_tables()
+        
+        result = tracker.create_budget(
+            budget_data['category'],
+            budget_data['amount'],
+            budget_data.get('period', 'monthly'),
+            budget_data.get('start_date'),
+            budget_data.get('end_date')
+        )
+        
+        return result
+    except Exception as e:
+        logger.exception("Failed to create budget")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/budgets')
+async def get_budgets():
+    """Get all budgets."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        budgets = tracker.get_budgets()
+        progress = tracker.get_budget_progress()
+        summary = tracker.get_budget_summary()
+        
+        return {
+            'budgets': budgets,
+            'progress': progress,
+            'summary': summary
+        }
+    except Exception as e:
+        logger.exception("Failed to get budgets")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/goals')
+async def create_goal(goal_data: dict):
+    """Create a new financial goal."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        tracker.create_budget_tables()
+        
+        result = tracker.create_goal(
+            goal_data['name'],
+            goal_data['target_amount'],
+            goal_data.get('deadline'),
+            goal_data.get('category')
+        )
+        
+        return result
+    except Exception as e:
+        logger.exception("Failed to create goal")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/goals')
+async def get_goals():
+    """Get all goals."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        goals = tracker.get_goals()
+        progress = tracker.get_goal_progress()
+        summary = tracker.get_budget_summary()
+        
+        return {
+            'goals': goals,
+            'progress': progress,
+            'summary': summary
+        }
+    except Exception as e:
+        logger.exception("Failed to get goals")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put('/goals/{goal_id}/progress')
+async def update_goal_progress(goal_id: int, progress_data: dict):
+    """Update goal progress."""
+    try:
+        tracker = BudgetTracker(indexer.engine)
+        result = tracker.update_goal_progress(goal_id, progress_data['current_amount'])
+        
+        return result
+    except Exception as e:
+        logger.exception("Failed to update goal progress")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/chat')

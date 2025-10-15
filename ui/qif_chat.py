@@ -9,7 +9,7 @@ QIF_API_URL = os.environ.get("QIF_API_URL", "http://qif-agent:8000")
 st.set_page_config(page_title="QIF Agent", page_icon="", layout="centered")
 
 # Sidebar navigation
-page = st.sidebar.selectbox("Choose a page", ["Chat", "Recurring Analysis", "Merchant Analysis", "Anomaly Detection", "Cash Flow Forecast", "Investment Portfolio"])
+page = st.sidebar.selectbox("Choose a page", ["Chat", "Recurring Analysis", "Merchant Analysis", "Anomaly Detection", "Cash Flow Forecast", "Investment Portfolio", "Transfer Analysis", "Budget & Goals"])
 
 if page == "Chat":
     st.title("Chat with My QIF Agent")
@@ -541,3 +541,247 @@ elif page == "Investment Portfolio":
                 st.dataframe(display_trans, use_container_width=True)
     except Exception as e:
         st.warning(f"Could not load transaction history: {e}")
+
+elif page == "Transfer Analysis":
+    st.title("Transfer Analysis")
+    
+    # Transfer controls
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        if st.button("Detect Transfers", type="primary"):
+            with st.spinner("Detecting transfers..."):
+                try:
+                    resp = requests.post(f"{QIF_API_URL}/admin/detect-transfers", timeout=120)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.success(f"Detected {len(data.get('transfers', []))} transfers!")
+                        st.rerun()
+                    else:
+                        st.error(f"Transfer detection failed: {resp.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    # Get transfer data
+    try:
+        resp = requests.get(f"{QIF_API_URL}/transfers", timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            transfers = data.get('transfers', [])
+            summary = data.get('summary', {})
+            
+            if transfers:
+                # Display summary
+                st.subheader("Transfer Summary")
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Transfers", summary.get('total_transfers', 0))
+                with col2:
+                    st.metric("Total Amount", f"${summary.get('total_transfer_amount', 0):,.2f}")
+                with col3:
+                    st.metric("Avg Confidence", f"{summary.get('avg_confidence', 0):.1%}")
+                with col4:
+                    st.metric("Unique Accounts", summary.get('unique_from_accounts', 0))
+                
+                # Display transfers table
+                st.subheader("Detected Transfers")
+                transfers_df = pd.DataFrame(transfers)
+                display_transfers = transfers_df[['from_account', 'to_account', 'amount', 'transfer_date', 'confidence_score']].copy()
+                display_transfers.columns = ['From Account', 'To Account', 'Amount', 'Date', 'Confidence']
+                display_transfers['Amount'] = display_transfers['Amount'].apply(lambda x: f"${x:,.2f}")
+                display_transfers['Confidence'] = display_transfers['Confidence'].apply(lambda x: f"{x:.1%}")
+                
+                st.dataframe(display_transfers, use_container_width=True)
+                
+                # Net cash flow analysis
+                st.subheader("Net Cash Flow Analysis")
+                try:
+                    cash_flow_resp = requests.get(f"{QIF_API_URL}/transfers/cash-flow", timeout=30)
+                    if cash_flow_resp.status_code == 200:
+                        cash_flow = cash_flow_resp.json()
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Income", f"${cash_flow.get('total_income', 0):,.2f}")
+                        with col2:
+                            st.metric("Total Expenses", f"${cash_flow.get('total_expenses', 0):,.2f}")
+                        with col3:
+                            st.metric("Net Cash Flow", f"${cash_flow.get('net_cash_flow', 0):,.2f}")
+                        with col4:
+                            st.metric("Transactions", cash_flow.get('transaction_count', 0))
+                except Exception as e:
+                    st.warning(f"Could not load cash flow data: {e}")
+            else:
+                st.info("No transfers detected. Click 'Detect Transfers' to analyze account transfers.")
+        else:
+            st.error(f"Failed to load transfers: {resp.text}")
+    except Exception as e:
+        st.error(f"Error loading transfers: {e}")
+
+elif page == "Budget & Goals":
+    st.title("Budget & Goals")
+    
+    # Create tabs for budgets and goals
+    tab1, tab2 = st.tabs(["Budgets", "Goals"])
+    
+    with tab1:
+        st.subheader("Budget Management")
+        
+        # Budget controls
+        col1, col2 = st.columns([3, 1])
+        
+        with col2:
+            if st.button("Get AI Suggestions", type="primary"):
+                with st.spinner("Analyzing spending patterns..."):
+                    try:
+                        resp = requests.get(f"{QIF_API_URL}/budgets/suggestions", timeout=60)
+                        if resp.status_code == 200:
+                            suggestions = resp.json().get('suggestions', [])
+                            st.session_state['budget_suggestions'] = suggestions
+                            st.success(f"Generated {len(suggestions)} budget suggestions!")
+                        else:
+                            st.error(f"Failed to get suggestions: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        # Display budget suggestions
+        if 'budget_suggestions' in st.session_state:
+            suggestions = st.session_state['budget_suggestions']
+            if suggestions:
+                st.subheader("AI-Powered Budget Suggestions")
+                suggestions_df = pd.DataFrame(suggestions)
+                display_suggestions = suggestions_df[['category', 'suggested_amount', 'historical_average', 'confidence']].copy()
+                display_suggestions.columns = ['Category', 'Suggested Amount', 'Historical Average', 'Confidence']
+                display_suggestions['Suggested Amount'] = display_suggestions['Suggested Amount'].apply(lambda x: f"${x:,.2f}")
+                display_suggestions['Historical Average'] = display_suggestions['Historical Average'].apply(lambda x: f"${x:,.2f}")
+                display_suggestions['Confidence'] = display_suggestions['Confidence'].apply(lambda x: f"{x:.1%}")
+                
+                st.dataframe(display_suggestions, use_container_width=True)
+        
+        # Create new budget form
+        with st.expander("Create New Budget", expanded=False):
+            with st.form("create_budget"):
+                category = st.text_input("Category")
+                amount = st.number_input("Amount", min_value=0.0, step=0.01)
+                period = st.selectbox("Period", ["monthly", "weekly", "yearly"])
+                
+                if st.form_submit_button("Create Budget"):
+                    if category and amount > 0:
+                        try:
+                            resp = requests.post(f"{QIF_API_URL}/budgets", 
+                                               json={"category": category, "amount": amount, "period": period})
+                            if resp.status_code == 200:
+                                st.success("Budget created successfully!")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to create budget: {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        
+        # Display budgets and progress
+        try:
+            resp = requests.get(f"{QIF_API_URL}/budgets", timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                budgets = data.get('budgets', [])
+                progress = data.get('progress', [])
+                summary = data.get('summary', {})
+                
+                if budgets:
+                    # Budget summary
+                    st.subheader("Budget Summary")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Budgets", summary.get('total_budgets', 0))
+                    with col2:
+                        st.metric("Total Amount", f"${summary.get('total_budget_amount', 0):,.2f}")
+                    with col3:
+                        st.metric("Goal Completion", f"{summary.get('goal_completion_rate', 0):.1f}%")
+                    
+                    # Budget progress
+                    st.subheader("Budget Progress")
+                    progress_df = pd.DataFrame(progress)
+                    if not progress_df.empty:
+                        display_progress = progress_df[['category', 'budget_amount', 'actual_spent', 'progress_percentage', 'over_budget']].copy()
+                        display_progress.columns = ['Category', 'Budget', 'Spent', 'Progress %', 'Over Budget']
+                        display_progress['Budget'] = display_progress['Budget'].apply(lambda x: f"${x:,.2f}")
+                        display_progress['Spent'] = display_progress['Spent'].apply(lambda x: f"${x:,.2f}")
+                        display_progress['Progress %'] = display_progress['Progress %'].apply(lambda x: f"{x:.1f}%")
+                        display_progress['Over Budget'] = display_progress['Over Budget'].apply(lambda x: "Yes" if x else "No")
+                        
+                        st.dataframe(display_progress, use_container_width=True)
+                else:
+                    st.info("No budgets created yet. Use the form above to create your first budget.")
+        except Exception as e:
+            st.error(f"Error loading budgets: {e}")
+    
+    with tab2:
+        st.subheader("Financial Goals")
+        
+        # Create new goal form
+        with st.expander("Create New Goal", expanded=False):
+            with st.form("create_goal"):
+                name = st.text_input("Goal Name")
+                target_amount = st.number_input("Target Amount", min_value=0.0, step=0.01)
+                deadline = st.date_input("Deadline (optional)")
+                category = st.text_input("Category (optional)")
+                
+                if st.form_submit_button("Create Goal"):
+                    if name and target_amount > 0:
+                        try:
+                            goal_data = {
+                                "name": name,
+                                "target_amount": target_amount,
+                                "category": category if category else None
+                            }
+                            if deadline:
+                                goal_data["deadline"] = deadline.isoformat()
+                            
+                            resp = requests.post(f"{QIF_API_URL}/goals", json=goal_data)
+                            if resp.status_code == 200:
+                                st.success("Goal created successfully!")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to create goal: {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        
+        # Display goals and progress
+        try:
+            resp = requests.get(f"{QIF_API_URL}/goals", timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                goals = data.get('goals', [])
+                progress = data.get('progress', [])
+                summary = data.get('summary', {})
+                
+                if goals:
+                    # Goals summary
+                    st.subheader("Goals Summary")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Goals", summary.get('total_goals', 0))
+                    with col2:
+                        st.metric("Target Amount", f"${summary.get('total_goal_amount', 0):,.2f}")
+                    with col3:
+                        st.metric("Current Progress", f"${summary.get('total_goal_progress', 0):,.2f}")
+                    with col4:
+                        st.metric("Completion Rate", f"{summary.get('goal_completion_rate', 0):.1f}%")
+                    
+                    # Goals progress
+                    st.subheader("Goals Progress")
+                    progress_df = pd.DataFrame(progress)
+                    if not progress_df.empty:
+                        display_progress = progress_df[['name', 'target_amount', 'current_amount', 'progress_percentage', 'is_complete']].copy()
+                        display_progress.columns = ['Goal', 'Target', 'Current', 'Progress %', 'Complete']
+                        display_progress['Target'] = display_progress['Target'].apply(lambda x: f"${x:,.2f}")
+                        display_progress['Current'] = display_progress['Current'].apply(lambda x: f"${x:,.2f}")
+                        display_progress['Progress %'] = display_progress['Progress %'].apply(lambda x: f"{x:.1f}%")
+                        display_progress['Complete'] = display_progress['Complete'].apply(lambda x: "Yes" if x else "No")
+                        
+                        st.dataframe(display_progress, use_container_width=True)
+                else:
+                    st.info("No goals created yet. Use the form above to create your first goal.")
+        except Exception as e:
+            st.error(f"Error loading goals: {e}")
