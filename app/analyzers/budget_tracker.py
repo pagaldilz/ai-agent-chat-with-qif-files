@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+from sqlalchemy import text
 
 class BudgetTracker:
     def __init__(self, engine):
@@ -36,8 +37,8 @@ class BudgetTracker:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(budgets_sql)
-            conn.execute(goals_sql)
+            conn.execute(text(budgets_sql))
+            conn.execute(text(goals_sql))
             conn.commit()
     
     def get_spending_by_category(self, start_date: str = None, end_date: str = None) -> Dict:
@@ -126,7 +127,7 @@ class BudgetTracker:
                 INSERT INTO budgets (category, period, amount, start_date, end_date)
                 VALUES (?, ?, ?, ?, ?)
                 """
-                conn.execute(insert_sql, (category, period, amount, start_date, end_date))
+                conn.execute(text(insert_sql), (category, period, amount, start_date, end_date))
                 conn.commit()
                 
                 return {'status': 'success', 'message': f'Budget created for {category}'}
@@ -201,7 +202,7 @@ class BudgetTracker:
                 INSERT INTO goals (name, target_amount, deadline, category)
                 VALUES (?, ?, ?, ?)
                 """
-                conn.execute(insert_sql, (name, target_amount, deadline, category))
+                conn.execute(text(insert_sql), (name, target_amount, deadline, category))
                 conn.commit()
                 
                 return {'status': 'success', 'message': f'Goal created: {name}'}
@@ -228,7 +229,7 @@ class BudgetTracker:
         try:
             with self.engine.connect() as conn:
                 update_sql = "UPDATE goals SET current_amount = ? WHERE id = ?"
-                conn.execute(update_sql, (current_amount, goal_id))
+                conn.execute(text(update_sql), (current_amount, goal_id))
                 conn.commit()
                 
                 return {'status': 'success', 'message': 'Goal progress updated'}

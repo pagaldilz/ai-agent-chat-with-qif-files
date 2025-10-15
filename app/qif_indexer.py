@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 import logging
-from sqlalchemy import create_engine, Column, Float, String, Date, MetaData, Table, Index
+from sqlalchemy import create_engine, Column, Float, String, Date, MetaData, Table, Index, Integer, text
 from datetime import date, datetime
 
 class QIFIndexer:
@@ -19,6 +19,7 @@ class QIFIndexer:
         self.metadata = MetaData()
         self.transactions = Table(
             'transactions', self.metadata,
+            Column('id', Integer, primary_key=True, autoincrement=True),
             Column('date', Date),
             Column('payee', String),
             Column('category', String),
@@ -34,6 +35,112 @@ class QIFIndexer:
         Index('ix_transactions_date', self.transactions.c.date)
         Index('ix_transactions_category', self.transactions.c.category)
         Index('ix_transactions_payee', self.transactions.c.payee)
+
+    def create_analyzer_tables(self):
+        """Create all analyzer tables if they don't exist."""
+        # Recurring transactions table
+        recurring_sql = """
+        CREATE TABLE IF NOT EXISTS recurring_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant_pattern TEXT,
+            amount_avg REAL,
+            amount_std REAL,
+            frequency_days REAL,
+            frequency_category TEXT,
+            last_seen TEXT,
+            next_expected TEXT,
+            confidence_score REAL,
+            transaction_count INTEGER,
+            category TEXT,
+            account_name TEXT,
+            account_type TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        
+        # Merchants table
+        merchants_sql = """
+        CREATE TABLE IF NOT EXISTS merchants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_name TEXT UNIQUE NOT NULL,
+            original_name TEXT,
+            transaction_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        
+        # Budgets table
+        budgets_sql = """
+        CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            period TEXT NOT NULL,
+            amount REAL NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        
+        # Goals table
+        goals_sql = """
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            current_amount REAL DEFAULT 0,
+            deadline TEXT,
+            category TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        
+        # Transfers table
+        transfers_sql = """
+        CREATE TABLE IF NOT EXISTS transfers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_transaction_id INTEGER,
+            to_transaction_id INTEGER,
+            from_account TEXT,
+            to_account TEXT,
+            amount REAL,
+            transfer_date TEXT,
+            confidence_score REAL,
+            detection_method TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (from_transaction_id) REFERENCES transactions (id),
+            FOREIGN KEY (to_transaction_id) REFERENCES transactions (id)
+        )
+        """
+        
+        # Anomalies table
+        anomalies_sql = """
+        CREATE TABLE IF NOT EXISTS anomalies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id INTEGER,
+            anomaly_type TEXT,
+            score REAL,
+            explanation TEXT,
+            date TEXT,
+            payee TEXT,
+            amount REAL,
+            category TEXT,
+            account_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+        )
+        """
+        
+        with self.engine.connect() as conn:
+            conn.execute(text(recurring_sql))
+            conn.execute(text(merchants_sql))
+            conn.execute(text(budgets_sql))
+            conn.execute(text(goals_sql))
+            conn.execute(text(transfers_sql))
+            conn.execute(text(anomalies_sql))
+            conn.commit()
+        
+        self.logger.info("Created all analyzer tables")
 
     def parse_qif_date(self, qif_date_str):
             """
@@ -161,6 +268,8 @@ class QIFIndexer:
         # Drop and recreate table
         self.metadata.drop_all(self.engine, checkfirst=True)
         self.metadata.create_all(self.engine)
+        # Create analyzer tables
+        self.create_analyzer_tables()
         # Populate
         df.to_sql('transactions', self.engine, if_exists='append', index=False)
         self.logger.info("Database build complete")
@@ -173,3 +282,5 @@ class QIFIndexer:
             self.build_database()
         else:
             self.logger.info(f"Database file {self.db_path} already exists and is populated.")
+            # Ensure analyzer tables exist even if database exists
+            self.create_analyzer_tables()

@@ -3,6 +3,7 @@ import re
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 import logging
+from sqlalchemy import text
 
 class MerchantNormalizer:
     def __init__(self, engine):
@@ -175,7 +176,7 @@ class MerchantNormalizer:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(create_table_sql)
+            conn.execute(text(create_table_sql))
             conn.commit()
     
     def _get_existing_merchants(self) -> List[Dict]:
@@ -197,7 +198,7 @@ class MerchantNormalizer:
                 INSERT OR IGNORE INTO merchants (canonical_name, original_name, transaction_count)
                 VALUES (?, ?, ?)
                 """
-                conn.execute(insert_sql, (
+                conn.execute(text(insert_sql), (
                     merchant['canonical_name'],
                     merchant['original_name'],
                     merchant['transaction_count']
@@ -211,11 +212,11 @@ class MerchantNormalizer:
                     SELECT original_name FROM merchants WHERE canonical_name = ?
                 )
                 """
-                result = conn.execute(count_sql, (canonical_name,))
+                result = conn.execute(text(count_sql), (canonical_name,))
                 count = result.fetchone()[0]
                 
                 update_sql = "UPDATE merchants SET transaction_count = ? WHERE canonical_name = ?"
-                conn.execute(update_sql, (count, canonical_name))
+                conn.execute(text(update_sql), (count, canonical_name))
             
             conn.commit()
     

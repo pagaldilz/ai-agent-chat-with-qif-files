@@ -5,3 +5,4 @@ db
 db/
 *.qifs
 *token*
+*.qif

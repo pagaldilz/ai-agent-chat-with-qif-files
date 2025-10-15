@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import List, Dict, Tuple
 import logging
+from sqlalchemy import text
 
 class RecurringDetector:
     def __init__(self, engine):
@@ -130,11 +131,11 @@ class RecurringDetector:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(create_table_sql)
+            conn.execute(text(create_table_sql))
             conn.commit()
             
             # Clear existing patterns
-            conn.execute("DELETE FROM recurring_transactions")
+            conn.execute(text("DELETE FROM recurring_transactions"))
             
             # Insert new patterns
             for pattern in patterns:
@@ -145,7 +146,7 @@ class RecurringDetector:
                  account_name, account_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                conn.execute(insert_sql, (
+                conn.execute(text(insert_sql), (
                     pattern['merchant_pattern'],
                     pattern['amount_avg'],
                     pattern['amount_std'],
