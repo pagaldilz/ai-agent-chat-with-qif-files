@@ -12,6 +12,9 @@ from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
 from sqlalchemy import text
 from app.qif_indexer import QIFIndexer
+from app.analyzers.recurring_detector import RecurringDetector
+from app.analyzers.merchant_normalizer import MerchantNormalizer
+from app.analyzers.anomaly_detector import AnomalyDetector
 from typing import Optional
 
 try:
@@ -159,7 +162,7 @@ class Query(BaseModel):
     question: str
 
 # SQL guardrails
-ALLOWED_COLUMNS = {"date", "payee", "category", "memo", "amount"}
+ALLOWED_COLUMNS = {"date", "payee", "category", "memo", "amount", "source_file", "account_name", "account_type"}
 DENY_PATTERN = re.compile(r"\b(insert|update|delete|drop|alter|attach|pragma|create|replace|vacuum|analyze|grant|reindex)\b", re.IGNORECASE)
 SQL_KEYWORDS = {
     'select', 'from', 'where', 'group', 'by', 'having', 'order', 'limit', 'offset',
@@ -329,15 +332,119 @@ async def count_transactions_year(year: int):
         logger.exception(f"Error counting transactions for year {year}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post('/analyze/recurring')
+async def analyze_recurring():
+    """Analyze and detect recurring transaction patterns."""
+    try:
+        detector = RecurringDetector(indexer.engine)
+        patterns = detector.detect_recurring_patterns()
+        detector.save_recurring_patterns(patterns)
+        
+        projections = detector.calculate_monthly_projections(patterns)
+        
+        logger.info(f"Analyzed {len(patterns)} recurring patterns")
+        return {
+            'patterns': patterns,
+            'projections': projections,
+            'status': 'success'
+        }
+    except Exception as e:
+        logger.exception("Recurring analysis failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/recurring')
+async def get_recurring():
+    """Get detected recurring transaction patterns."""
+    try:
+        detector = RecurringDetector(indexer.engine)
+        patterns = detector.get_recurring_patterns()
+        projections = detector.calculate_monthly_projections(patterns)
+        
+        return {
+            'patterns': patterns,
+            'projections': projections
+        }
+    except Exception as e:
+        logger.exception("Failed to get recurring patterns")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/admin/normalize-merchants')
+async def normalize_merchants():
+    """Normalize merchant names and create canonical mappings."""
+    try:
+        normalizer = MerchantNormalizer(indexer.engine)
+        mappings = normalizer.normalize_merchants()
+        
+        logger.info(f"Normalized {len(mappings)} merchants")
+        return {
+            'mappings': mappings,
+            'status': 'success'
+        }
+    except Exception as e:
+        logger.exception("Merchant normalization failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/merchants')
+async def get_merchants():
+    """Get merchant statistics and top merchants."""
+    try:
+        normalizer = MerchantNormalizer(indexer.engine)
+        statistics = normalizer.get_merchant_statistics()
+        top_merchants = normalizer.get_top_merchants()
+        
+        return {
+            'statistics': statistics,
+            'top_merchants': top_merchants
+        }
+    except Exception as e:
+        logger.exception("Failed to get merchant data")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/analyze/anomalies')
+async def analyze_anomalies():
+    """Analyze and detect transaction anomalies."""
+    try:
+        detector = AnomalyDetector(indexer.engine)
+        anomalies = detector.detect_all_anomalies()
+        detector.save_anomalies(anomalies)
+        
+        summary = detector.get_anomaly_summary()
+        
+        logger.info(f"Analyzed {len(anomalies)} anomalies")
+        return {
+            'anomalies': anomalies,
+            'summary': summary,
+            'status': 'success'
+        }
+    except Exception as e:
+        logger.exception("Anomaly analysis failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/anomalies')
+async def get_anomalies(anomaly_type: str = None, limit: int = 50):
+    """Get detected anomalies."""
+    try:
+        detector = AnomalyDetector(indexer.engine)
+        anomalies = detector.get_anomalies(anomaly_type, limit)
+        summary = detector.get_anomaly_summary()
+        
+        return {
+            'anomalies': anomalies,
+            'summary': summary
+        }
+    except Exception as e:
+        logger.exception("Failed to get anomalies")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post('/chat')
 async def chat(query: dict):
     user_question = query['question']
-    schema = "transactions(date DATE, payee TEXT, category TEXT, memo TEXT, amount REAL)"
+    schema = "transactions(date DATE, payee TEXT, category TEXT, memo TEXT, amount REAL, source_file TEXT, account_name TEXT, account_type TEXT)"
 
     prompt = (
         f"You are a SQLite SQL expert. Return only a valid SQLite SELECT statement using this schema: \n"
         f"{schema}\n"
-        f"Rules: Only SELECT; table is 'transactions'; columns are date, payee, category, memo, amount. "
+        f"Rules: Only SELECT; table is 'transactions'; columns are date, payee, category, memo, amount, source_file, account_name, account_type. "
         f"Use strftime('%Y', date) to filter by year. Do not include explanations, markdown, or code fences.\n"
         f"Question: {user_question}\n"
         f"SQL:"
@@ -379,7 +486,26 @@ async def chat(query: dict):
                 d['amount'] = f"${amt:,.2f}"
             rows.append(d)
         conn.close()
-        return {'answer': format_human_readable(rows, sql)}
+        
+        # Generate explanation of what the query does
+        explanation_prompt = (
+            f"Explain what this SQL query does in simple terms: {sql}\n"
+            f"Context: The user asked: '{user_question}'\n"
+            f"Return a brief 1-2 sentence explanation of what the query is looking for."
+        )
+        
+        try:
+            explanation = generate_sql(explanation_prompt)
+            explanation = sanitize_sql(explanation).strip()
+        except Exception as e:
+            logger.warning(f"Failed to generate explanation: {e}")
+            explanation = f"This query searches for transactions matching your criteria."
+        
+        return {
+            'answer': format_human_readable(rows, sql),
+            'sql': sql,
+            'explanation': explanation
+        }
     except HTTPException:
         raise
     except Exception as e:

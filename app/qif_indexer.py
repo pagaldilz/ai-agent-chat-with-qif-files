@@ -24,6 +24,9 @@ class QIFIndexer:
             Column('category', String),
             Column('memo', String),
             Column('amount', Float),
+            Column('source_file', String),
+            Column('account_name', String),
+            Column('account_type', String),
             # Indexes for common filters
             sqlite_autoincrement=False,
         )
@@ -77,11 +80,24 @@ class QIFIndexer:
                 self.logger.info(f"Parsing QIF file: {path}")
                 with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                     current = {}
+                    current_account = {'name': '', 'type': ''}
                     for line in f:
                         line = line.strip()
                         if not line:
                             continue
-                        if line == '^':
+                        # Handle account headers
+                        if line.startswith('!Account'):
+                            # Account name follows
+                            continue
+                        elif line.startswith('!Type:'):
+                            # Account type (Bank, Credit Card, Investment, etc.)
+                            current_account['type'] = line[6:]  # Remove '!Type:'
+                            continue
+                        elif line.startswith('N'):
+                            # Account name
+                            current_account['name'] = line[1:]
+                            continue
+                        elif line == '^':
                             # Process and store transaction
                             # Date
                             dt = self.parse_qif_date(current.get('date', '')) if 'date' in current else None
@@ -99,6 +115,9 @@ class QIFIndexer:
                                 'category': current.get('category', ''),
                                 'memo': current.get('memo', ''),
                                 'amount': amt,
+                                'source_file': fname,
+                                'account_name': current_account['name'],
+                                'account_type': current_account['type'],
                             })
                             current = {}
                         elif line.startswith('D'):
@@ -127,6 +146,9 @@ class QIFIndexer:
                             'category': current.get('category', ''),
                             'memo': current.get('memo', ''),
                             'amount': amt,
+                            'source_file': fname,
+                            'account_name': current_account['name'],
+                            'account_type': current_account['type'],
                         })
             self.logger.info(f"Parsed total {len(records)} transactions")
             df = pd.DataFrame(records)
