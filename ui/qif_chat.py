@@ -491,6 +491,8 @@ elif page == "Investment Portfolio":
                                   startangle=90)
                             ax.set_title('Asset Allocation')
                             st.pyplot(fig)
+                except Exception as e:
+                    st.warning(f"Could not load asset allocation: {e}")
             else:
                 st.info("No investment data available. Click 'Parse Investments' to load investment data from QIF files.")
         else:
