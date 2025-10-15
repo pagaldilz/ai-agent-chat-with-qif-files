@@ -15,6 +15,8 @@ from app.qif_indexer import QIFIndexer
 from app.analyzers.recurring_detector import RecurringDetector
 from app.analyzers.merchant_normalizer import MerchantNormalizer
 from app.analyzers.anomaly_detector import AnomalyDetector
+from app.analyzers.forecast_engine import ForecastEngine
+from app.analyzers.investment_analyzer import InvestmentAnalyzer
 from typing import Optional
 
 try:
@@ -434,6 +436,117 @@ async def get_anomalies(anomaly_type: str = None, limit: int = 50):
         }
     except Exception as e:
         logger.exception("Failed to get anomalies")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/forecast/{days}')
+async def get_forecast(days: int, account_name: str = None):
+    """Get cash flow forecast for specified number of days."""
+    try:
+        if days < 1 or days > 365:
+            raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
+        
+        engine = ForecastEngine(indexer.engine)
+        forecast = engine.generate_forecast(days, account_name)
+        
+        return forecast
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to generate forecast")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/forecast/summary/{days}')
+async def get_forecast_summary(days: int):
+    """Get forecast summary for all accounts."""
+    try:
+        if days < 1 or days > 365:
+            raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
+        
+        engine = ForecastEngine(indexer.engine)
+        summary = engine.get_forecast_summary(days)
+        
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to generate forecast summary")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/forecast/trends')
+async def get_spending_trends(days_back: int = 90):
+    """Get spending trends for forecast accuracy."""
+    try:
+        if days_back < 1 or days_back > 365:
+            raise HTTPException(status_code=400, detail="Days back must be between 1 and 365")
+        
+        engine = ForecastEngine(indexer.engine)
+        trends = engine.get_spending_trends(days_back)
+        
+        return trends
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get spending trends")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/admin/parse-investments')
+async def parse_investments():
+    """Parse investment data from QIF files and store in database."""
+    try:
+        analyzer = InvestmentAnalyzer(indexer.engine, qif_dir)
+        result = analyzer.parse_and_store_investments()
+        
+        return result
+    except Exception as e:
+        logger.exception("Investment parsing failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/investments/portfolio')
+async def get_portfolio():
+    """Get current portfolio summary."""
+    try:
+        analyzer = InvestmentAnalyzer(indexer.engine, qif_dir)
+        portfolio = analyzer.get_portfolio_summary()
+        
+        return portfolio
+    except Exception as e:
+        logger.exception("Failed to get portfolio")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/investments/transactions')
+async def get_investment_transactions(security: str = None, limit: int = 100):
+    """Get investment transaction history."""
+    try:
+        analyzer = InvestmentAnalyzer(indexer.engine, qif_dir)
+        transactions = analyzer.get_transaction_history(security, limit)
+        
+        return {'transactions': transactions}
+    except Exception as e:
+        logger.exception("Failed to get investment transactions")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/investments/performance')
+async def get_investment_performance():
+    """Get investment performance analysis."""
+    try:
+        analyzer = InvestmentAnalyzer(indexer.engine, qif_dir)
+        performance = analyzer.get_performance_analysis()
+        
+        return performance
+    except Exception as e:
+        logger.exception("Failed to get investment performance")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/investments/allocation')
+async def get_asset_allocation():
+    """Get asset allocation breakdown."""
+    try:
+        analyzer = InvestmentAnalyzer(indexer.engine, qif_dir)
+        allocation = analyzer.get_asset_allocation()
+        
+        return allocation
+    except Exception as e:
+        logger.exception("Failed to get asset allocation")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/chat')
