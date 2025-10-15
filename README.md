@@ -71,6 +71,20 @@ The Agent creates a SQLite database called **"transactions.db"**.  A table **"tr
    - The FastAPI backend will be available at [http://localhost:8000](http://localhost:8000)
    - The Streamlit UI will be available at [http://localhost:8501](http://localhost:8501)
 
+To use OpenAI instead of Ollama, set the following environment variables in `docker-compose.yml`:
+
+- `LLM_PROVIDER=openai`
+- `OPENAI_API_KEY=...`
+- `LLM_MODEL=gpt-4o-mini`
+
+To use Azure OpenAI:
+
+- `LLM_PROVIDER=azure`
+- `AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com`
+- `AZURE_OPENAI_API_KEY=...`
+- `AZURE_OPENAI_DEPLOYMENT=your-deployment`
+- `AZURE_OPENAI_API_VERSION=2024-02-01`
+
 4. **Chat with Your QIF Agent**
 
    Open [http://localhost:8501](http://localhost:8501) in your browser and start asking questions about your finances!
@@ -90,11 +104,27 @@ Set in `docker-compose.yml`:
 - `QIF_DIR` — Path to QIF files (default: `/qifs`)
 - `DB_PATH` — Path to SQLite database (default: `/db/transactions.db`)
 - `OLLAMA_URL` — URL for Ollama server (default: `http://host.docker.internal:11434`)
+- `LLM_PROVIDER` — `ollama` | `openai` | `azure` (default: `ollama`)
+- `LLM_MODEL` — model name (e.g., `phi4-mini:3.8b`, `gpt-4o-mini`)
+- `LLM_TEMPERATURE` — float (default: `0`)
+- `OPENAI_API_KEY` — required if `LLM_PROVIDER=openai`
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` — required if `LLM_PROVIDER=azure`
 
 ## Development
 
 - Backend code: [`app/main.py`](app/main.py), [`app/qif_indexer.py`](app/qif_indexer.py)
 - UI code: [`ui/qif_chat.py`](ui/qif_chat.py)
+
+## Safety & Guardrails
+
+The chat endpoint enforces read-only SQL:
+
+- Only `SELECT` statements are allowed; single statement only (no `;`).
+- Only `FROM transactions` is permitted.
+- Disallowed keywords: `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `ATTACH`, `PRAGMA`, `CREATE`, etc.
+- A default `LIMIT 500` is added unless an aggregate query is detected.
+
+If a query is rejected, the UI will display a friendly message.
 
 ## License
 

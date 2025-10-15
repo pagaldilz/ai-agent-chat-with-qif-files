@@ -16,6 +16,18 @@ services:
       - QIF_DIR=/qifs
       - DB_PATH=/db/transactions.db
       - OLLAMA_URL=http://host.docker.internal:11434
+      # LLM configuration (defaults keep Ollama). To use OpenAI or Azure, set below:
+      # - LLM_PROVIDER=openai
+      # - OPENAI_API_KEY=sk-...
+      # - LLM_MODEL=gpt-4o-mini
+      # or for Azure OpenAI:
+      # - LLM_PROVIDER=azure
+      # - AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
+      # - AZURE_OPENAI_API_KEY=...
+      # - AZURE_OPENAI_DEPLOYMENT=your-deployment
+      # - AZURE_OPENAI_API_VERSION=2024-02-01
+      # Optional tuning
+      # - LLM_TEMPERATURE=0
     ports:
       - "8000:8000"
   qif-ui:

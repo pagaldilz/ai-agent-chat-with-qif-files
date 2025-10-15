@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 import logging
-from sqlalchemy import create_engine, Column, Float, String, Date, MetaData, Table
+from sqlalchemy import create_engine, Column, Float, String, Date, MetaData, Table, Index
 from datetime import date, datetime
 
 class QIFIndexer:
@@ -24,7 +24,13 @@ class QIFIndexer:
             Column('category', String),
             Column('memo', String),
             Column('amount', Float),
+            # Indexes for common filters
+            sqlite_autoincrement=False,
         )
+        # Define indexes (created in build_database when metadata.create_all runs)
+        Index('ix_transactions_date', self.transactions.c.date)
+        Index('ix_transactions_category', self.transactions.c.category)
+        Index('ix_transactions_payee', self.transactions.c.payee)
 
     def parse_qif_date(self, qif_date_str):
             """

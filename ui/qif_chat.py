@@ -4,8 +4,8 @@ import os
 
 QIF_API_URL = os.environ.get("QIF_API_URL", "http://qif-agent:8000")
 
-st.set_page_config(page_title="Chat with My QIF Agent", page_icon="💸", layout="centered")
-st.title("💸 Chat with My QIF Agent")
+st.set_page_config(page_title="Chat with My QIF Agent", page_icon="", layout="centered")
+st.title("Chat with My QIF Agent")
 st.markdown("""
     Ask questions about your finances! 
     The agent is trained on your QIF files and can answer queries about transactions.
@@ -31,9 +31,14 @@ if user_input:
     # Call the QIF FastAPI agent
     try:
         resp = requests.post(f"{QIF_API_URL}/chat", json={"question": user_input}, timeout=60)
-        answer = resp.json().get("answer", "No answer.")
+        if resp.status_code == 400:
+            # Guardrail rejection or bad request
+            err = resp.json().get("detail", "Your query was blocked by safety checks. Try rephrasing.")
+            answer = f"Query blocked: {err}"
+        else:
+            answer = resp.json().get("answer", "No answer.")
     except Exception as e:
-        answer = f"❌ Error: {e}"
+        answer = f"Error: {e}"
     st.session_state.history.append({"role": "assistant", "content": answer})
 
 for entry in st.session_state.history:
