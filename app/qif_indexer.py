@@ -38,16 +38,29 @@ class QIFIndexer:
             Logs and returns None if parsing fails.
             """
             try:
-                # Handle mm/dd'yyyy format (with or without leading zero)
-                if "'" in qif_date_str:
-                    parts = qif_date_str.split("'")
+                # Normalize whitespace
+                q = qif_date_str.strip()
+                # Handle mm/dd'yyyy or mm/d'yy (two-digit year) formats
+                if "'" in q:
+                    parts = q.split("'")
                     if len(parts) == 2:
-                        mmdd, yyyy = parts
+                        mmdd, yy_or_yyyy = parts
                         month, day = [int(x) for x in mmdd.split('/')]
-                        year = int(yyyy)
+                        # Two-digit year handling with 1970-2069 pivot
+                        if len(yy_or_yyyy) == 2:
+                            yy = int(yy_or_yyyy)
+                            year = 1900 + yy if yy >= 70 else 2000 + yy
+                        else:
+                            year = int(yy_or_yyyy)
                         return date(year, month, day)
-                # Fallback: try mm/dd/yyyy
-                return datetime.strptime(qif_date_str, "%m/%d/%Y").date()
+                # Fallbacks: mm/dd/yyyy, mm/d/yy, m/d/yy
+                for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%e/%Y", "%m/%e/%y"):
+                    try:
+                        return datetime.strptime(q, fmt).date()
+                    except Exception:
+                        pass
+                # If nothing matched, raise to be caught below
+                raise ValueError("Unsupported QIF date format")
             except Exception as e:
                 self.logger.warning(f"Bad date format: {qif_date_str} ({e})")
                 return None

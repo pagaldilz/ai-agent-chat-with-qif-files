@@ -1,6 +1,6 @@
 # QIF Agent
 
-**QIF Agent** is an AI-powered financial assistant that lets you chat with your own QIF (Quicken Interchange Format) data. It parses your QIF files, stores transactions in a SQLite database, and uses an LLM (via [Ollama](https://ollama.com/)) to answer natural language questions about your finances. The project includes a FastAPI backend and a Streamlit-based web UI.
+**QIF Agent** is an AI-powered financial assistant that lets you chat with your own QIF (Quicken Interchange Format) data. It parses your QIF files, stores transactions in a SQLite database, and uses a local LLM (via [LM Studio](https://lmstudio.ai/) by default, or [Ollama](https://ollama.com/)) to answer natural language questions about your finances. The project includes a FastAPI backend and a Streamlit-based web UI.
 
 Start the Streamlib web UI, then ask it queries like
 - List all transactions from 2021 where category like Util or like Electric
@@ -45,18 +45,16 @@ The Agent creates a SQLite database called **"transactions.db"**.  A table **"tr
 ## Prerequisites
 
 - [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
-- [Ollama](https://ollama.com/) running locally or accessible (for LLM inference)
+- One local LLM runtime (default is LM Studio):
+  - [LM Studio](https://lmstudio.ai/) with its OpenAI-compatible server enabled, or
+  - [Ollama](https://ollama.com/)
 - At least one `.qif` file in the `qifs/` directory
 
 ## Quick Start
 
-1. **Start Ollama**
+1. **Start LM Studio** (default)
 
-   Make sure Ollama is running and the `phi4-mini:3.8b` model is available:
-
-   ```sh
-   ollama run phi4-mini:3.8b
-   ```
+   Ensure LM Studio is running, a model is loaded, and the server is enabled (default `http://localhost:1234`).
 
 2. **Add Your QIF Files**
 
@@ -71,7 +69,13 @@ The Agent creates a SQLite database called **"transactions.db"**.  A table **"tr
    - The FastAPI backend will be available at [http://localhost:8000](http://localhost:8000)
    - The Streamlit UI will be available at [http://localhost:8501](http://localhost:8501)
 
-To use OpenAI instead of Ollama, set the following environment variables in `docker-compose.yml`:
+### LM Studio (default)
+
+LM Studio provides an OpenAI-compatible local API. `docker-compose.yml` is already configured with `LLM_PROVIDER=lmstudio` and `LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1`. Optionally set `LLM_MODEL` to one from `/v1/models`.
+
+The backend uses the same prompt via an OpenAI-compatible `chat.completions` call. For recent LM Studio releases (see [LM Studio API Changelog](https://lmstudio.ai/docs/app/api-changelog)), the newer `/v1/responses` endpoint also exists, but `chat.completions` remains compatible and is used here.
+
+To use OpenAI instead, set the following environment variables in `docker-compose.yml`:
 
 - `LLM_PROVIDER=openai`
 - `OPENAI_API_KEY=...`
@@ -103,8 +107,9 @@ Set in `docker-compose.yml`:
 
 - `QIF_DIR` — Path to QIF files (default: `/qifs`)
 - `DB_PATH` — Path to SQLite database (default: `/db/transactions.db`)
-- `OLLAMA_URL` — URL for Ollama server (default: `http://host.docker.internal:11434`)
-- `LLM_PROVIDER` — `ollama` | `openai` | `azure` (default: `ollama`)
+- `LMSTUDIO_BASE_URL` — Base URL for LM Studio OpenAI-compatible API (default: `http://localhost:1234/v1`)
+- `OLLAMA_URL` — URL for Ollama server (used only when `LLM_PROVIDER=ollama`)
+- `LLM_PROVIDER` — `lmstudio` | `ollama` | `openai` | `azure` (default: `lmstudio`)
 - `LLM_MODEL` — model name (e.g., `phi4-mini:3.8b`, `gpt-4o-mini`)
 - `LLM_TEMPERATURE` — float (default: `0`)
 - `OPENAI_API_KEY` — required if `LLM_PROVIDER=openai`

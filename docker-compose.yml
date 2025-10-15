@@ -15,8 +15,14 @@ services:
     environment:
       - QIF_DIR=/qifs
       - DB_PATH=/db/transactions.db
-      - OLLAMA_URL=http://host.docker.internal:11434
-      # LLM configuration (defaults keep Ollama). To use OpenAI or Azure, set below:
+      # LM Studio (default)
+      - LLM_PROVIDER=lmstudio
+      - LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      # Optional: set model id from LM Studio /v1/models
+      # - LLM_MODEL=unsloth/gpt-oss-20b
+      # Ollama (optional; only used if LLM_PROVIDER=ollama)
+      # - OLLAMA_URL=http://host.docker.internal:11434
+      # OpenAI or Azure (optional):
       # - LLM_PROVIDER=openai
       # - OPENAI_API_KEY=sk-...
       # - LLM_MODEL=gpt-4o-mini

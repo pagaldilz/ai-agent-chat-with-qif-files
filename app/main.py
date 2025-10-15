@@ -31,9 +31,13 @@ db_path = os.getenv('DB_PATH', '/db/transactions.db')
 ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 
 # LLM configuration
-llm_provider = os.getenv('LLM_PROVIDER', 'ollama').lower()  # ollama|openai|azure
+llm_provider = os.getenv('LLM_PROVIDER', 'lmstudio').lower()  # lmstudio|ollama|openai|azure
 llm_model = os.getenv('LLM_MODEL', 'phi4-mini:3.8b')
 llm_temperature = float(os.getenv('LLM_TEMPERATURE', '0'))
+
+# LM Studio configuration (OpenAI-compatible local API)
+lmstudio_base_url = os.getenv('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1')
+lmstudio_api_key = os.getenv('LMSTUDIO_API_KEY')
 
 # OpenAI/Azure configuration
 openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -89,6 +93,19 @@ def _generate_sql_with_openai(prompt: str) -> str:
     )
     return completion.choices[0].message.content or ""
 
+def _generate_sql_with_lmstudio(prompt: str) -> str:
+    if OpenAI is None:
+        raise HTTPException(status_code=500, detail="OpenAI SDK not installed. Add 'openai' to requirements.")
+    # LM Studio exposes OpenAI-compatible endpoints; api_key may be optional
+    client = OpenAI(api_key=lmstudio_api_key or "lm-studio", base_url=lmstudio_base_url)
+    completion = client.chat.completions.create(
+        model=llm_model,
+        temperature=llm_temperature,
+        messages=[{"role": "system", "content": "You are a SQLite SQL expert."},
+                  {"role": "user", "content": prompt}],
+    )
+    return completion.choices[0].message.content or ""
+
 def _generate_sql_with_azure(prompt: str) -> str:
     if OpenAI is None:
         raise HTTPException(status_code=500, detail="OpenAI SDK not installed. Add 'openai' to requirements.")
@@ -111,6 +128,8 @@ def generate_sql(prompt: str) -> str:
     provider = llm_provider
     if provider == 'ollama':
         return _generate_sql_with_ollama(prompt)
+    if provider == 'lmstudio':
+        return _generate_sql_with_lmstudio(prompt)
     if provider == 'openai':
         return _generate_sql_with_openai(prompt)
     if provider == 'azure':
@@ -191,6 +210,26 @@ def enforce_guardrails(sql: str) -> str:
         sql += " LIMIT 500"
     return sql
 
+@app.post('/admin/rebuild')
+async def admin_rebuild():
+    """Rebuild the SQLite database from QIF files."""
+    try:
+        # Remove existing DB file to force rebuild
+        try:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+        except Exception as e:
+            logger.warning(f"Could not remove existing DB: {e}")
+        # Recreate indexer (fresh engine) and rebuild
+        global indexer
+        indexer = QIFIndexer(qif_dir, db_path)
+        indexer.build_database()
+        logger.info("Database rebuild complete")
+        return {"status": "ok", "message": "Database rebuilt"}
+    except Exception as e:
+        logger.exception("Database rebuild failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get('/transactions/{year}')
 async def list_transactions(year: int):
     try:
@@ -232,10 +271,26 @@ async def list_transactions(year: int):
 @app.get('/health')
 def health_check():
     try:
-        r = requests.get(f"{ollama_url}/v1/models")
-        r.raise_for_status()
-        logger.info("Health check OK")
-        return {'status': 'ok'}
+        provider = llm_provider
+        if provider == 'ollama':
+            r = requests.get(f"{ollama_url}/v1/models", timeout=5)
+            r.raise_for_status()
+            logger.info("Health check OK (ollama)")
+            return {'status': 'ok'}
+        if provider == 'lmstudio':
+            base = lmstudio_base_url.rstrip('/')
+            r = requests.get(f"{base}/models", timeout=5)
+            r.raise_for_status()
+            logger.info("Health check OK (lmstudio)")
+            return {'status': 'ok'}
+        # For hosted providers, simply report OK if configured
+        if provider == 'openai':
+            logger.info("Health check OK (openai)")
+            return {'status': 'ok'}
+        if provider == 'azure':
+            logger.info("Health check OK (azure)")
+            return {'status': 'ok'}
+        raise HTTPException(status_code=500, detail=f"Unsupported LLM_PROVIDER: {provider}")
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))
