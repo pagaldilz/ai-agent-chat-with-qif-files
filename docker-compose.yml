@@ -1,0 +1,31 @@
+# ---------------------------
+# docker-compose.yml
+# ---------------------------
+services:
+  qif-agent:
+    build: .
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --log-level info
+    volumes:
+      - ./qifs:/qifs:ro    # QIF files mounted read-only
+      - ./db:/db          # Database storage
+    environment:
+      - QIF_DIR=/qifs
+      - DB_PATH=/db/transactions.db
+      - OLLAMA_URL=http://host.docker.internal:11434
+    ports:
+      - "8000:8000"
+  qif-ui:
+    ports:
+      - "8501:8501"
+    depends_on:
+      - qif-agent
+    environment:
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - QIF_API_URL=http://qif-agent:8000  # This env will be used in the Streamlit app
+    build:
+       context: ./ui
+       dockerfile: Dockerfile

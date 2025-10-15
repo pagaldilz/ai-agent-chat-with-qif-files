@@ -1,0 +1,7 @@
+# Ignore qifs files and directories
+qifs
+qifs/
+db
+db/
+*.qifs
+*token*
