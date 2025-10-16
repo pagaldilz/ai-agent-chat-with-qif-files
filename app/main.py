@@ -66,6 +66,44 @@ db_uri = f"sqlite:///{db_path}"
 db = SQLDatabase.from_uri(db_uri)
 logger.info("SQLDatabase initialized")
 
+def generate_insights_overview() -> dict:
+    """Run analyzers and return a consolidated insights object."""
+    # Recurring patterns
+    recurring = RecurringDetector(indexer.engine)
+    patterns = recurring.detect_recurring_patterns()
+    recurring.save_recurring_patterns(patterns)
+    projections = recurring.calculate_monthly_projections(patterns)
+
+    # Anomalies
+    anomalies_engine = AnomalyDetector(indexer.engine)
+    anomalies = anomalies_engine.detect_all_anomalies()
+    anomalies_engine.save_anomalies(anomalies)
+    anomaly_summary = anomalies_engine.get_anomaly_summary()
+
+    # Forecast (next 30 days)
+    forecast = ForecastEngine(indexer.engine)
+    forecast_summary = forecast.get_forecast_summary(30)
+
+    # Transfers
+    transfers_engine = TransferDetector(indexer.engine)
+    transfers = transfers_engine.detect_transfers()
+    transfers_engine.save_transfers(transfers)
+    transfers_engine.update_transaction_transfer_flags()
+    transfer_summary = transfers_engine.get_transfer_summary()
+
+    # Budget suggestions
+    budgets = BudgetTracker(indexer.engine)
+    budgets.create_budget_tables()
+    budget_suggestions = budgets.suggest_budgets('monthly')
+
+    return {
+        'recurring': {'patterns': patterns, 'projections': projections},
+        'anomalies': {'summary': anomaly_summary, 'count': len(anomalies)},
+        'forecast': forecast_summary,
+        'transfers': transfer_summary,
+        'budget_suggestions': budget_suggestions,
+    }
+
 def _generate_sql_with_ollama(prompt: str) -> str:
     response = requests.post(
         f"{ollama_url}/api/generate",
@@ -232,10 +270,12 @@ async def admin_rebuild():
         indexer = QIFIndexer(qif_dir, db_path)
         stats = indexer.build_database()
         logger.info("Database rebuild complete")
+        insights = generate_insights_overview()
         return {
             "status": "ok",
             "message": "Database rebuilt",
-            "import_summary": stats
+            "import_summary": stats,
+            "insights": insights
         }
     except Exception as e:
         logger.exception("Database rebuild failed")
@@ -305,6 +345,15 @@ def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))
+
+@app.get('/insights/overview')
+async def insights_overview():
+    """Generate and return a consolidated insights overview."""
+    try:
+        return generate_insights_overview()
+    except Exception as e:
+        logger.exception("Failed to generate insights overview")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get('/count')
 async def count_transactions():

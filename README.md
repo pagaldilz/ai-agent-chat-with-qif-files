@@ -1,6 +1,6 @@
 # QIF Agent
 
-**QIF Agent** is an AI-powered financial assistant that lets you chat with your own QIF (Quicken Interchange Format) data. It parses your QIF files, stores transactions in a SQLite database, and uses a local LLM (via [LM Studio](https://lmstudio.ai/) by default, or [Ollama](https://ollama.com/)) to answer natural language questions about your finances. The project includes a FastAPI backend and a Streamlit-based web UI.
+**QIF Agent** is an AI-powered financial assistant that lets you chat with your own QIF (Quicken Interchange Format) data. It parses your QIF files, stores transactions in a SQLite database, and uses a local LLM (via [LM Studio](https://lmstudio.ai/) by default, or [Ollama](https://ollama.com/)) to answer natural language questions about your finances. The project includes a FastAPI backend and a Streamlit-based web UI. After ingestion, the backend now auto-generates consolidated insights (recurring patterns, anomalies, 30‑day forecast, transfers, and budget suggestions) that you can fetch via a single endpoint.
 
 Start the Streamlib web UI, then ask it queries like
 - List all transactions from 2021 where category like Util or like Electric
@@ -100,6 +100,8 @@ To use Azure OpenAI:
 - `GET /transactions/count/{year}` — Count transactions for a given year
 - `GET /count` — Total number of transactions
 - `GET /health` — Health check
+- `POST /admin/rebuild` — Rebuild DB from QIF files; now returns an `insights` object
+- `GET /insights/overview` — Generate a consolidated insights overview on demand
 
 ## Environment Variables
 
