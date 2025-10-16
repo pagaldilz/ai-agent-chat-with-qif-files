@@ -419,8 +419,22 @@ async def analyze_anomalies():
         summary = detector.get_anomaly_summary()
         
         logger.info(f"Analyzed {len(anomalies)} anomalies")
+        # Ensure anomalies are JSON-serializable
+        sanitized_anomalies = []
+        for a in anomalies:
+            sanitized_anomalies.append({
+                'transaction_id': int(a['transaction_id']) if a.get('transaction_id') is not None else None,
+                'anomaly_type': a.get('anomaly_type'),
+                'score': float(a['score']) if a.get('score') is not None else None,
+                'explanation': a.get('explanation'),
+                'date': str(a.get('date')) if a.get('date') is not None else None,
+                'payee': a.get('payee'),
+                'amount': float(a['amount']) if a.get('amount') is not None else None,
+                'category': a.get('category'),
+                'account_name': a.get('account_name'),
+            })
         return {
-            'anomalies': anomalies,
+            'anomalies': sanitized_anomalies,
             'summary': summary,
             'status': 'success'
         }
@@ -567,8 +581,21 @@ async def detect_transfers():
         summary = detector.get_transfer_summary()
         
         logger.info(f"Detected {len(transfers)} transfers")
+        # Ensure response is JSON-serializable
+        sanitized_transfers = []
+        for t in transfers:
+            sanitized_transfers.append({
+                'from_transaction_id': int(t['from_transaction_id']) if t.get('from_transaction_id') is not None else None,
+                'to_transaction_id': int(t['to_transaction_id']) if t.get('to_transaction_id') is not None else None,
+                'from_account': t.get('from_account'),
+                'to_account': t.get('to_account'),
+                'amount': float(t['amount']) if t.get('amount') is not None else None,
+                'transfer_date': str(t.get('transfer_date')) if t.get('transfer_date') is not None else None,
+                'confidence_score': float(t['confidence_score']) if t.get('confidence_score') is not None else None,
+                'detection_method': t.get('detection_method'),
+            })
         return {
-            'transfers': transfers,
+            'transfers': sanitized_transfers,
             'summary': summary,
             'status': 'success'
         }

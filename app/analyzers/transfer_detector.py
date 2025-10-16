@@ -71,13 +71,13 @@ class TransferDetector:
                     
                     # Create transfer record
                     transfer = {
-                        'from_transaction_id': transaction['id'] if amount < 0 else best_match['id'],
-                        'to_transaction_id': best_match['id'] if amount < 0 else transaction['id'],
-                        'from_account': account if amount < 0 else best_match['account_name'],
-                        'to_account': best_match['account_name'] if amount < 0 else account,
-                        'amount': abs(amount),
+                        'from_transaction_id': int(transaction['id']) if amount < 0 else int(best_match['id']),
+                        'to_transaction_id': int(best_match['id']) if amount < 0 else int(transaction['id']),
+                        'from_account': str(account if amount < 0 else best_match['account_name']),
+                        'to_account': str(best_match['account_name'] if amount < 0 else account),
+                        'amount': float(abs(amount)),
                         'transfer_date': date.isoformat(),
-                        'confidence_score': 1.0 - (best_match['score'] / 10.0),  # Normalize score
+                        'confidence_score': float(1.0 - (best_match['score'] / 10.0)),  # Normalize score
                         'detection_method': 'amount_date_matching'
                     }
                     
@@ -129,18 +129,19 @@ class TransferDetector:
                 INSERT INTO transfers 
                 (from_transaction_id, to_transaction_id, from_account, to_account, 
                  amount, transfer_date, confidence_score, detection_method)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (:from_transaction_id, :to_transaction_id, :from_account, :to_account, :amount, :transfer_date, :confidence_score, :detection_method)
                 """
-                conn.execute(text(insert_sql), (
-                    transfer['from_transaction_id'],
-                    transfer['to_transaction_id'],
-                    transfer['from_account'],
-                    transfer['to_account'],
-                    transfer['amount'],
-                    transfer['transfer_date'],
-                    transfer['confidence_score'],
-                    transfer['detection_method']
-                ))
+                params = {
+                    'from_transaction_id': transfer['from_transaction_id'],
+                    'to_transaction_id': transfer['to_transaction_id'],
+                    'from_account': transfer['from_account'],
+                    'to_account': transfer['to_account'],
+                    'amount': transfer['amount'],
+                    'transfer_date': transfer['transfer_date'],
+                    'confidence_score': transfer['confidence_score'],
+                    'detection_method': transfer['detection_method'],
+                }
+                conn.execute(text(insert_sql), params)
             
             conn.commit()
             self.logger.info(f"Saved {len(transfers)} transfers to database")
@@ -226,11 +227,11 @@ class TransferDetector:
             if not df.empty:
                 row = df.iloc[0]
                 return {
-                    'total_transfers': row['total_transfers'],
-                    'total_transfer_amount': round(row['total_transfer_amount'], 2),
-                    'avg_confidence': round(row['avg_confidence'], 3),
-                    'unique_from_accounts': row['unique_from_accounts'],
-                    'unique_to_accounts': row['unique_to_accounts']
+                    'total_transfers': int(row['total_transfers']) if pd.notna(row['total_transfers']) else 0,
+                    'total_transfer_amount': float(round(row['total_transfer_amount'], 2)) if pd.notna(row['total_transfer_amount']) else 0.0,
+                    'avg_confidence': float(round(row['avg_confidence'], 3)) if pd.notna(row['avg_confidence']) else 0.0,
+                    'unique_from_accounts': int(row['unique_from_accounts']) if pd.notna(row['unique_from_accounts']) else 0,
+                    'unique_to_accounts': int(row['unique_to_accounts']) if pd.notna(row['unique_to_accounts']) else 0,
                 }
         except Exception as e:
             self.logger.warning(f"Failed to get transfer summary: {e}")
@@ -248,7 +249,7 @@ class TransferDetector:
             with self.engine.connect() as conn:
                 # Try to add the column (will fail if it already exists)
                 try:
-                    conn.execute(alter_sql)
+                    conn.execute(text(alter_sql))
                     conn.commit()
                 except Exception:
                     pass  # Column already exists
@@ -263,7 +264,7 @@ class TransferDetector:
                     SELECT to_transaction_id FROM transfers
                 )
                 """
-                conn.execute(update_sql)
+                conn.execute(text(update_sql))
                 conn.commit()
                 
                 self.logger.info("Updated transaction transfer flags")

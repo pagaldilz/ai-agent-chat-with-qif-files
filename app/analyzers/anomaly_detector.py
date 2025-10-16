@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 import logging
 from scipy import stats
+from sqlalchemy import text
 
 class AnomalyDetector:
     def __init__(self, engine):
@@ -36,13 +37,13 @@ class AnomalyDetector:
         for idx in anomaly_indices:
             row = df.iloc[idx]
             anomaly = {
-                'transaction_id': row['id'],
+                'transaction_id': int(row['id']),
                 'anomaly_type': 'amount_outlier',
                 'score': float(z_scores[idx]),
                 'explanation': f"Transaction amount ${row['amount']:,.2f} is {z_scores[idx]:.1f} standard deviations from the mean",
-                'date': row['date'],
-                'payee': row['payee'],
-                'amount': row['amount'],
+                'date': pd.to_datetime(row['date'], errors='coerce').isoformat() if pd.notna(row['date']) else None,
+                'payee': str(row['payee']) if pd.notna(row['payee']) else None,
+                'amount': float(row['amount']) if pd.notna(row['amount']) else None,
                 'category': row['category'],
                 'account_name': row['account_name']
             }
@@ -94,13 +95,13 @@ class AnomalyDetector:
             recent_transactions = group[group['date'] >= recent_cutoff]
             if len(recent_transactions) > 3:  # More than 3 transactions in a week
                 anomaly = {
-                    'transaction_id': recent_transactions.iloc[-1]['id'],
+                    'transaction_id': int(recent_transactions.iloc[-1]['id']),
                     'anomaly_type': 'frequency_spike',
                     'score': len(recent_transactions) / 3.0,  # Normalize by expected frequency
                     'explanation': f"Unusually frequent transactions with {payee}: {len(recent_transactions)} transactions in the last 7 days",
-                    'date': recent_transactions.iloc[-1]['date'],
+                    'date': pd.to_datetime(recent_transactions.iloc[-1]['date'], errors='coerce').isoformat() if pd.notna(recent_transactions.iloc[-1]['date']) else None,
                     'payee': payee,
-                    'amount': recent_transactions.iloc[-1]['amount'],
+                    'amount': float(recent_transactions.iloc[-1]['amount']) if pd.notna(recent_transactions.iloc[-1]['amount']) else None,
                     'category': recent_transactions.iloc[-1]['category'],
                     'account_name': recent_transactions.iloc[-1]['account_name']
                 }
@@ -124,7 +125,10 @@ class AnomalyDetector:
         
         # Find merchants that appeared recently
         cutoff_date = datetime.now() - timedelta(days=lookback_days)
-        recent_merchants = df[df['first_seen'] >= cutoff_date]
+        # Normalize types to avoid comparing str with datetime
+        df['first_seen'] = pd.to_datetime(df['first_seen'], errors='coerce')
+        cutoff_ts = pd.to_datetime(cutoff_date)
+        recent_merchants = df[df['first_seen'] >= cutoff_ts]
         
         anomalies = []
         
@@ -138,9 +142,12 @@ class AnomalyDetector:
             """
             
             merchant_df = pd.read_sql(merchant_query, self.engine, params=(merchant['payee'],))
+            # Ensure merchant transaction dates are datetime for sorting and selection
+            if 'date' in merchant_df.columns:
+                merchant_df['date'] = pd.to_datetime(merchant_df['date'], errors='coerce')
             
             # Calculate risk score based on amount and frequency
-            total_amount = abs(merchant_df['amount'].sum())
+            total_amount = float(abs(merchant_df['amount'].sum()))
             transaction_count = len(merchant_df)
             
             # Higher risk for larger amounts or many transactions
@@ -148,16 +155,16 @@ class AnomalyDetector:
             
             if risk_score > 2.0:  # Threshold for new merchant risk
                 # Get the most recent transaction
-                latest_transaction = merchant_df.iloc[-1]
-                
+                merchant_df_sorted = merchant_df.sort_values('date') if 'date' in merchant_df.columns else merchant_df
+                latest_transaction = merchant_df_sorted.iloc[-1]
                 anomaly = {
-                    'transaction_id': latest_transaction['id'],
+                    'transaction_id': int(latest_transaction['id']),
                     'anomaly_type': 'new_merchant',
                     'score': risk_score,
                     'explanation': f"New merchant '{merchant['payee']}' with {transaction_count} transactions totaling ${total_amount:,.2f}",
-                    'date': latest_transaction['date'],
+                    'date': pd.to_datetime(latest_transaction['date'], errors='coerce').isoformat() if pd.notna(latest_transaction['date']) else None,
                     'payee': merchant['payee'],
-                    'amount': latest_transaction['amount'],
+                    'amount': float(latest_transaction['amount']) if pd.notna(latest_transaction['amount']) else None,
                     'category': latest_transaction['category'],
                     'account_name': latest_transaction['account_name']
                 }
@@ -211,30 +218,31 @@ class AnomalyDetector:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(create_table_sql)
+            conn.execute(text(create_table_sql))
             conn.commit()
             
             # Clear existing anomalies
-            conn.execute("DELETE FROM anomalies")
+            conn.execute(text("DELETE FROM anomalies"))
             
             # Insert new anomalies
             for anomaly in anomalies:
                 insert_sql = """
                 INSERT INTO anomalies 
                 (transaction_id, anomaly_type, score, explanation, date, payee, amount, category, account_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (:transaction_id, :anomaly_type, :score, :explanation, :date, :payee, :amount, :category, :account_name)
                 """
-                conn.execute(insert_sql, (
-                    anomaly['transaction_id'],
-                    anomaly['anomaly_type'],
-                    anomaly['score'],
-                    anomaly['explanation'],
-                    anomaly['date'],
-                    anomaly['payee'],
-                    anomaly['amount'],
-                    anomaly['category'],
-                    anomaly['account_name']
-                ))
+                params = {
+                    'transaction_id': anomaly['transaction_id'],
+                    'anomaly_type': anomaly['anomaly_type'],
+                    'score': anomaly['score'],
+                    'explanation': anomaly['explanation'],
+                    'date': str(anomaly['date']) if anomaly.get('date') is not None else None,
+                    'payee': anomaly['payee'],
+                    'amount': anomaly['amount'],
+                    'category': anomaly['category'],
+                    'account_name': anomaly['account_name'],
+                }
+                conn.execute(text(insert_sql), params)
             
             conn.commit()
             self.logger.info(f"Saved {len(anomalies)} anomalies to database")
