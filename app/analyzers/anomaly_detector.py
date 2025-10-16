@@ -66,6 +66,9 @@ class AnomalyDetector:
         if df.empty:
             return []
         
+        # Convert date column to datetime
+        df['date'] = pd.to_datetime(df['date'])
+        
         anomalies = []
         
         # Group by payee to find frequency anomalies
@@ -85,7 +88,10 @@ class AnomalyDetector:
             std_interval = time_diffs.std()
             
             # Check for unusually frequent transactions
-            recent_transactions = group[group['date'] >= datetime.now() - timedelta(days=7)]
+            recent_cutoff = datetime.now() - timedelta(days=7)
+            # Ensure date column is datetime for comparison
+            group['date'] = pd.to_datetime(group['date'])
+            recent_transactions = group[group['date'] >= recent_cutoff]
             if len(recent_transactions) > 3:  # More than 3 transactions in a week
                 anomaly = {
                     'transaction_id': recent_transactions.iloc[-1]['id'],

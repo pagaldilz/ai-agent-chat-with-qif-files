@@ -63,7 +63,7 @@ class QIFIndexer:
         CREATE TABLE IF NOT EXISTS merchants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             canonical_name TEXT UNIQUE NOT NULL,
-            original_name TEXT,
+            original_names TEXT, -- This will store a JSON array of original names
             transaction_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

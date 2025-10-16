@@ -440,21 +440,21 @@ async def get_anomalies(anomaly_type: str = None, limit: int = 50):
         logger.exception("Failed to get anomalies")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get('/forecast/{days}')
-async def get_forecast(days: int, account_name: str = None):
-    """Get cash flow forecast for specified number of days."""
+@app.get('/forecast/trends')
+async def get_spending_trends(days_back: int = 90):
+    """Get spending trends for forecast accuracy."""
     try:
-        if days < 1 or days > 365:
-            raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
+        if days_back < 1 or days_back > 365:
+            raise HTTPException(status_code=400, detail="Days back must be between 1 and 365")
         
         engine = ForecastEngine(indexer.engine)
-        forecast = engine.generate_forecast(days, account_name)
+        trends = engine.get_spending_trends(days_back)
         
-        return forecast
+        return trends
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to generate forecast")
+        logger.exception("Failed to get spending trends")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get('/forecast/summary/{days}')
@@ -474,21 +474,21 @@ async def get_forecast_summary(days: int):
         logger.exception("Failed to generate forecast summary")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get('/forecast/trends')
-async def get_spending_trends(days_back: int = 90):
-    """Get spending trends for forecast accuracy."""
+@app.get('/forecast/{days}')
+async def get_forecast(days: int, account_name: str = None):
+    """Get cash flow forecast for specified number of days."""
     try:
-        if days_back < 1 or days_back > 365:
-            raise HTTPException(status_code=400, detail="Days back must be between 1 and 365")
+        if days < 1 or days > 365:
+            raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
         
         engine = ForecastEngine(indexer.engine)
-        trends = engine.get_spending_trends(days_back)
+        forecast = engine.generate_forecast(days, account_name)
         
-        return trends
+        return forecast
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to get spending trends")
+        logger.exception("Failed to generate forecast")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/admin/parse-investments')
@@ -702,7 +702,13 @@ async def update_goal_progress(goal_id: int, progress_data: dict):
 
 @app.post('/chat')
 async def chat(query: dict):
+    if 'question' not in query:
+        raise HTTPException(status_code=422, detail="Missing required field: question")
+    
     user_question = query['question']
+    
+    if not user_question or user_question.strip() == "":
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
     schema = "transactions(date DATE, payee TEXT, category TEXT, memo TEXT, amount REAL, source_file TEXT, account_name TEXT, account_type TEXT)"
 
     prompt = (

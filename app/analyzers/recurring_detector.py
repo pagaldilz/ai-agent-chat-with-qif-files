@@ -166,13 +166,31 @@ class RecurringDetector:
     
     def get_recurring_patterns(self) -> List[Dict]:
         """Retrieve recurring patterns from the database."""
-        query = """
-        SELECT * FROM recurring_transactions 
-        ORDER BY confidence_score DESC
-        """
-        
-        df = pd.read_sql(query, self.engine)
-        return df.to_dict('records')
+        try:
+            query = """
+            SELECT * FROM recurring_transactions 
+            ORDER BY confidence_score DESC
+            """
+            
+            df = pd.read_sql(query, self.engine)
+            if df.empty:
+                return []
+            
+            # Convert DataFrame to list of dictionaries, handling NaN values
+            records = []
+            for _, row in df.iterrows():
+                record = {}
+                for col in df.columns:
+                    value = row[col]
+                    if pd.isna(value):
+                        record[col] = None
+                    else:
+                        record[col] = value
+                records.append(record)
+            return records
+        except Exception as e:
+            self.logger.warning(f"Failed to get recurring patterns: {e}")
+            return []
     
     def calculate_monthly_projections(self, patterns: List[Dict]) -> Dict:
         """Calculate monthly spending projections based on recurring patterns."""

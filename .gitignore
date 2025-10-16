@@ -28,3 +28,16 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+
+# Ignore test files and directories
+tests
+tests/
+test_reports/
+run_tests.bat
+run_tests.sh
+pytest.ini
+
+
+*.xls
+*.xlsx

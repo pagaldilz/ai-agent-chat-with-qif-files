@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
 import logging
 from collections import defaultdict
+from sqlalchemy import text
 
 class TransferDetector:
     def __init__(self, engine):
@@ -116,11 +117,11 @@ class TransferDetector:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(create_table_sql)
+            conn.execute(text(create_table_sql))
             conn.commit()
             
             # Clear existing transfers
-            conn.execute("DELETE FROM transfers")
+            conn.execute(text("DELETE FROM transfers"))
             
             # Insert new transfers
             for transfer in transfers:
@@ -130,7 +131,7 @@ class TransferDetector:
                  amount, transfer_date, confidence_score, detection_method)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                conn.execute(insert_sql, (
+                conn.execute(text(insert_sql), (
                     transfer['from_transaction_id'],
                     transfer['to_transaction_id'],
                     transfer['from_account'],
