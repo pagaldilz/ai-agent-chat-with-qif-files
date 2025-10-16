@@ -36,12 +36,15 @@ class AnomalyDetector:
         
         for idx in anomaly_indices:
             row = df.iloc[idx]
+            # Convert date safely; pandas can yield NaT which breaks isoformat
+            raw_date = pd.to_datetime(row['date'], errors='coerce')
+            safe_date = raw_date.isoformat() if pd.notna(raw_date) else None
             anomaly = {
                 'transaction_id': int(row['id']),
                 'anomaly_type': 'amount_outlier',
                 'score': float(z_scores[idx]),
                 'explanation': f"Transaction amount ${row['amount']:,.2f} is {z_scores[idx]:.1f} standard deviations from the mean",
-                'date': pd.to_datetime(row['date'], errors='coerce').isoformat() if pd.notna(row['date']) else None,
+                'date': safe_date,
                 'payee': str(row['payee']) if pd.notna(row['payee']) else None,
                 'amount': float(row['amount']) if pd.notna(row['amount']) else None,
                 'category': row['category'],
@@ -94,12 +97,15 @@ class AnomalyDetector:
             group['date'] = pd.to_datetime(group['date'])
             recent_transactions = group[group['date'] >= recent_cutoff]
             if len(recent_transactions) > 3:  # More than 3 transactions in a week
+                last_row = recent_transactions.iloc[-1]
+                last_row_date = pd.to_datetime(last_row['date'], errors='coerce')
+                safe_last_date = last_row_date.isoformat() if pd.notna(last_row_date) else None
                 anomaly = {
                     'transaction_id': int(recent_transactions.iloc[-1]['id']),
                     'anomaly_type': 'frequency_spike',
                     'score': len(recent_transactions) / 3.0,  # Normalize by expected frequency
                     'explanation': f"Unusually frequent transactions with {payee}: {len(recent_transactions)} transactions in the last 7 days",
-                    'date': pd.to_datetime(recent_transactions.iloc[-1]['date'], errors='coerce').isoformat() if pd.notna(recent_transactions.iloc[-1]['date']) else None,
+                    'date': safe_last_date,
                     'payee': payee,
                     'amount': float(recent_transactions.iloc[-1]['amount']) if pd.notna(recent_transactions.iloc[-1]['amount']) else None,
                     'category': recent_transactions.iloc[-1]['category'],
@@ -157,12 +163,14 @@ class AnomalyDetector:
                 # Get the most recent transaction
                 merchant_df_sorted = merchant_df.sort_values('date') if 'date' in merchant_df.columns else merchant_df
                 latest_transaction = merchant_df_sorted.iloc[-1]
+                latest_dt = pd.to_datetime(latest_transaction['date'], errors='coerce')
+                safe_latest_date = latest_dt.isoformat() if pd.notna(latest_dt) else None
                 anomaly = {
                     'transaction_id': int(latest_transaction['id']),
                     'anomaly_type': 'new_merchant',
                     'score': risk_score,
                     'explanation': f"New merchant '{merchant['payee']}' with {transaction_count} transactions totaling ${total_amount:,.2f}",
-                    'date': pd.to_datetime(latest_transaction['date'], errors='coerce').isoformat() if pd.notna(latest_transaction['date']) else None,
+                    'date': safe_latest_date,
                     'payee': merchant['payee'],
                     'amount': float(latest_transaction['amount']) if pd.notna(latest_transaction['amount']) else None,
                     'category': latest_transaction['category'],

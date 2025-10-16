@@ -78,9 +78,10 @@ class RecurringDetector:
                 
                 # Get most recent transaction
                 last_transaction = group.iloc[-1]
-                
-                # Calculate next expected date
-                next_expected = last_transaction['date'] + timedelta(days=int(avg_interval))
+                # Ensure datetime and guard against NaT
+                last_dt = pd.to_datetime(last_transaction['date'], errors='coerce')
+                # Calculate next expected date safely
+                next_expected = (last_dt + timedelta(days=int(avg_interval))) if pd.notna(last_dt) else None
                 
                 pattern = {
                     'merchant_pattern': payee,
@@ -88,8 +89,8 @@ class RecurringDetector:
                     'amount_std': round(std_amount, 2),
                     'frequency_days': round(avg_interval, 1),
                     'frequency_category': frequency,
-                    'last_seen': last_transaction['date'].isoformat(),
-                    'next_expected': next_expected.isoformat(),
+                    'last_seen': last_dt.isoformat() if pd.notna(last_dt) else None,
+                    'next_expected': next_expected.isoformat() if isinstance(next_expected, pd.Timestamp) or hasattr(next_expected, 'isoformat') else (next_expected if next_expected is None else str(next_expected)),
                     'confidence_score': round(confidence, 3),
                     'transaction_count': len(group),
                     'category': last_transaction['category'],

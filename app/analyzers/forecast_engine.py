@@ -53,11 +53,22 @@ class ForecastEngine:
         upcoming_bills = []
         
         for pattern in recurring:
-            last_seen = datetime.fromisoformat(pattern['last_seen'])
-            next_expected = datetime.fromisoformat(pattern['next_expected'])
+            # Guard against missing/invalid ISO strings
+            last_seen = None
+            next_expected = None
+            try:
+                if pattern.get('last_seen'):
+                    last_seen = datetime.fromisoformat(str(pattern['last_seen']))
+            except Exception:
+                last_seen = None
+            try:
+                if pattern.get('next_expected'):
+                    next_expected = datetime.fromisoformat(str(pattern['next_expected']))
+            except Exception:
+                next_expected = None
             
             # Check if the next expected date is within our forecast period
-            if next_expected <= datetime.now() + timedelta(days=days_ahead):
+            if next_expected is not None and next_expected <= datetime.now() + timedelta(days=days_ahead):
                 upcoming_bills.append({
                     'merchant': pattern['merchant_pattern'],
                     'amount': pattern['amount_avg'],

@@ -45,6 +45,49 @@ class QIFIndexer:
         Index('ix_transactions_category', self.transactions.c.category)
         Index('ix_transactions_payee', self.transactions.c.payee)
 
+        # Master/list tables
+        self.categories = Table(
+            'categories', self.metadata,
+            Column('name', String, primary_key=True),
+            Column('parent', String),
+            Column('tax_line', String),
+        )
+        Index('ix_categories_name', self.categories.c.name)
+
+        self.tags = Table(
+            'tags', self.metadata,
+            Column('name', String, primary_key=True),
+            Column('note', String),
+        )
+        Index('ix_tags_name', self.tags.c.name)
+
+        self.securities = Table(
+            'securities', self.metadata,
+            Column('name', String, primary_key=True),
+            Column('symbol', String),
+            Column('type', String),
+        )
+        Index('ix_securities_symbol', self.securities.c.symbol)
+
+        self.prices = Table(
+            'prices', self.metadata,
+            Column('security', String),
+            Column('symbol', String),
+            Column('date', Date),
+            Column('price', Float),
+            Column('source_file', String),
+        )
+        Index('ix_prices_symbol_date', self.prices.c.symbol, self.prices.c.date)
+
+        self.memorized = Table(
+            'memorized', self.metadata,
+            Column('payee', String, primary_key=True),
+            Column('category', String),
+            Column('memo', String),
+            Column('amount', Float),
+        )
+        Index('ix_memorized_payee', self.memorized.c.payee)
+
     def create_analyzer_tables(self):
         """Create all analyzer tables if they don't exist."""
         # Recurring transactions table
@@ -302,6 +345,20 @@ class QIFIndexer:
         # Populate
         df.to_sql('transactions', self.engine, if_exists='append', index=False)
         self.import_stats['records_inserted'] = int(len(df))
+        # Parse and populate master lists
+        try:
+            from app.parsers.master_lists_parser import MasterListsParser
+            parser = MasterListsParser(self.qif_dir)
+            frames = parser.parse()
+            # Write each frame safely
+            frames.get('categories').to_sql('categories', self.engine, if_exists='replace', index=False)
+            frames.get('tags').to_sql('tags', self.engine, if_exists='replace', index=False)
+            frames.get('securities').to_sql('securities', self.engine, if_exists='replace', index=False)
+            frames.get('prices').to_sql('prices', self.engine, if_exists='replace', index=False)
+            frames.get('memorized').to_sql('memorized', self.engine, if_exists='replace', index=False)
+            self.logger.info("Master lists parsed and stored")
+        except Exception as e:
+            self.logger.warning(f"Master lists parsing failed: {e}")
         self.logger.info("Database build complete")
         return dict(self.import_stats)
 

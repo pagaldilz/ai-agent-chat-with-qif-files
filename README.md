@@ -103,6 +103,17 @@ To use Azure OpenAI:
 - `POST /admin/rebuild` — Rebuild DB from QIF files; now returns an `insights` object
 - `GET /insights/overview` — Generate a consolidated insights overview on demand
 
+### Master/List Tables
+The rebuild process also ingests QIF master sections when present and creates the following tables:
+
+- `categories(name, parent, tax_line)`
+- `tags(name, note)`
+- `securities(name, symbol, type)`
+- `prices(security, symbol, date, price, source_file)`
+- `memorized(payee, category, memo, amount)`
+
+These are populated from `!Type:Cat`, `!Type:Tag`, `!Type:Security`, `!Type:Prices`, and `!Type:Memorized` blocks. No foreign keys are enforced by default; they serve as reference data for analyses.
+
 ## Environment Variables
 
 Set in `docker-compose.yml`:
