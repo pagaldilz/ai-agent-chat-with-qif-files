@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Dashboard - Executive Dashboard</title>
+    <link rel="stylesheet" href="assets/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="assets/sample-data.js"></script>
+    <style>
+        /* Design 3 Specific Styles */
+        .layout {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: var(--bg-primary);
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent-gold);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .main {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .hero-section {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .hero-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .hero-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .hero-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-positive));
+        }
+
+        .hero-card.primary::before {
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-info));
+        }
+
+        .hero-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            line-height: 1;
+        }
+
+        .hero-label {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .hero-change {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .hero-change.positive {
+            color: var(--accent-positive);
+        }
+
+        .hero-change.negative {
+            color: var(--accent-negative);
+        }
+
+        .hero-trend {
+            width: 80px;
+            height: 30px;
+            margin-top: 1rem;
+        }
+
+        .dashboard-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--bg-secondary);
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .section-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .section-content {
+            padding: 1.5rem;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .data-tables {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .table-container {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .table-header {
+            background: var(--bg-secondary);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-title {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .table-content {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 1rem 1.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table td {
+            color: var(--text-secondary);
+        }
+
+        .table tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-badge.positive {
+            background: rgba(0, 212, 170, 0.2);
+            color: var(--accent-positive);
+        }
+
+        .status-badge.negative {
+            background: rgba(255, 107, 107, 0.2);
+            color: var(--accent-negative);
+        }
+
+        .status-badge.warning {
+            background: rgba(255, 167, 38, 0.2);
+            color: var(--accent-warning);
+        }
+
+        /* Chat Modal */
+        .chat-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .chat-modal.open {
+            display: flex;
+        }
+
+        .chat-container {
+            width: 80%;
+            height: 90%;
+            max-width: 1200px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .chat-header {
+            background: var(--bg-secondary);
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .chat-close {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 0.5rem;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .chat-close:hover {
+            background: var(--bg-hover);
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 1rem;
+            border-radius: var(--radius-md);
+        }
+
+        .chat-message.user {
+            background: var(--accent-info);
+            color: white;
+            margin-left: auto;
+        }
+
+        .chat-message.assistant {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .chat-input {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .chat-input button {
+            padding: 1rem 2rem;
+            background: var(--accent-info);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .chat-input button:hover {
+            background: #0056b3;
+        }
+
+        /* Floating Action Button */
+        .fab {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-info));
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            z-index: 100;
+            transition: var(--transition);
+            animation: pulse 3s infinite;
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 215, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .hero-section {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .charts-grid,
+            .data-tables {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main {
+                padding: 1rem;
+            }
+            
+            .hero-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .hero-value {
+                font-size: 2rem;
+            }
+            
+            .chat-container {
+                width: 95%;
+                height: 95%;
+            }
+            
+            .fab {
+                width: 60px;
+                height: 60px;
+                font-size: 1.25rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.5rem 1rem;
+            }
+            
+            .logo {
+                font-size: 1rem;
+            }
+            
+            .user-info {
+                display: none;
+            }
+            
+            .hero-card {
+                padding: 1.5rem;
+            }
+            
+            .hero-value {
+                font-size: 1.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">💰 FinancePro</div>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <span>👤</span>
+                    <span>John Doe</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle">🌙</button>
+                <button class="btn btn-primary btn-sm">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Hero Section -->
+            <div class="hero-section">
+                <div class="hero-card primary">
+                    <div class="hero-value" style="color: var(--accent-gold)">$125,430</div>
+                    <div class="hero-label">Net Worth</div>
+                    <div class="hero-change positive">
+                        <span>↗</span>
+                        <span>+8.2% this month</span>
+                    </div>
+                    <canvas class="hero-trend" id="netWorthTrend"></canvas>
+                </div>
+                <div class="hero-card">
+                    <div class="hero-value" style="color: var(--accent-positive)">$2,841</div>
+                    <div class="hero-label">Monthly Cash Flow</div>
+                    <div class="hero-change negative">
+                        <span>↘</span>
+                        <span>-2.1% from last month</span>
+                    </div>
+                    <canvas class="hero-trend" id="cashFlowTrend"></canvas>
+                </div>
+                <div class="hero-card">
+                    <div class="hero-value" style="color: var(--accent-warning)">78.5%</div>
+                    <div class="hero-label">Budget Utilization</div>
+                    <div class="hero-change positive">
+                        <span>↗</span>
+                        <span>+5.3% from target</span>
+                    </div>
+                    <canvas class="hero-trend" id="budgetTrend"></canvas>
+                </div>
+                <div class="hero-card">
+                    <div class="hero-value" style="color: var(--accent-positive)">12.4%</div>
+                    <div class="hero-label">Investment Returns</div>
+                    <div class="hero-change positive">
+                        <span>↗</span>
+                        <span>+3.2% this quarter</span>
+                    </div>
+                    <canvas class="hero-trend" id="returnsTrend"></canvas>
+                </div>
+            </div>
+
+            <!-- Dashboard Sections -->
+            <div class="dashboard-sections">
+                <!-- Charts Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2 class="section-title">Financial Overview</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm">Export</button>
+                            <button class="btn btn-primary btn-sm">Refresh</button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="charts-grid">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Spending Breakdown</h3>
+                                    <button class="btn btn-secondary btn-sm">Details</button>
+                                </div>
+                                <div class="chart-container">
+                                    <canvas id="spendingChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Cash Flow Forecast</h3>
+                                    <button class="btn btn-secondary btn-sm">Export</button>
+                                </div>
+                                <div class="chart-container">
+                                    <canvas id="forecastChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Tables Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2 class="section-title">Transaction Analysis</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm">Filter</button>
+                            <button class="btn btn-secondary btn-sm">Export</button>
+                            <button class="btn btn-primary btn-sm">Analyze</button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="data-tables">
+                            <div class="table-container">
+                                <div class="table-header">
+                                    <h3 class="table-title">Recent Transactions</h3>
+                                    <div class="table-actions">
+                                        <button class="btn btn-secondary btn-sm">View All</button>
+                                    </div>
+                                </div>
+                                <div class="table-content">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Payee</th>
+                                                <th>Category</th>
+                                                <th>Amount</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recentTransactions">
+                                            <!-- Populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <div class="table-header">
+                                    <h3 class="table-title">Recurring Patterns</h3>
+                                    <div class="table-actions">
+                                        <button class="btn btn-secondary btn-sm">Analyze</button>
+                                    </div>
+                                </div>
+                                <div class="table-content">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Merchant</th>
+                                                <th>Amount</th>
+                                                <th>Frequency</th>
+                                                <th>Next Due</th>
+                                                <th>Confidence</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recurringPatterns">
+                                            <!-- Populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budget Progress Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2 class="section-title">Budget & Goals Progress</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm">Manage</button>
+                            <button class="btn btn-primary btn-sm">Set Goals</button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div id="budgetProgress">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Investment Portfolio Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2 class="section-title">Investment Portfolio</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm">Details</button>
+                            <button class="btn btn-primary btn-sm">Rebalance</button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="charts-grid">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Portfolio Summary</h3>
+                                </div>
+                                <div class="kpi-card">
+                                    <div class="kpi-value" style="color: var(--accent-positive)">$45,620</div>
+                                    <div class="kpi-label">Total Value</div>
+                                    <div class="kpi-change positive">+$3,620 (+8.6%)</div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Asset Allocation</h3>
+                                </div>
+                                <div class="chart-container">
+                                    <canvas id="allocationChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Floating Action Button -->
+    <button class="fab" id="chatFab">💬</button>
+
+    <!-- Chat Modal -->
+    <div class="chat-modal" id="chatModal">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2 class="chat-title">AI Financial Assistant</h2>
+                <button class="chat-close" id="chatClose">✕</button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="chat-input">
+                <div class="chat-input-container">
+                    <input type="text" placeholder="Ask about your finances, investments, budgets, or any financial questions..." id="chatInput">
+                    <button class="btn btn-primary" id="sendMessage">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        });
+
+        // Chat Modal
+        const chatFab = document.getElementById('chatFab');
+        const chatModal = document.getElementById('chatModal');
+        const chatClose = document.getElementById('chatClose');
+
+        chatFab.addEventListener('click', () => {
+            chatModal.classList.add('open');
+        });
+
+        chatClose.addEventListener('click', () => {
+            chatModal.classList.remove('open');
+        });
+
+        // Close modal when clicking outside
+        chatModal.addEventListener('click', (e) => {
+            if (e.target === chatModal) {
+                chatModal.classList.remove('open');
+            }
+        });
+
+        // Initialize Charts
+        function initCharts() {
+            // Spending Chart
+            const spendingCtx = document.getElementById('spendingChart').getContext('2d');
+            new Chart(spendingCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sampleData.spendingCategories.map(cat => cat.name),
+                    datasets: [{
+                        data: sampleData.spendingCategories.map(cat => cat.amount),
+                        backgroundColor: sampleData.spendingCategories.map(cat => cat.color),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: 'var(--text-primary)',
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Forecast Chart
+            const forecastCtx = document.getElementById('forecastChart').getContext('2d');
+            new Chart(forecastCtx, {
+                type: 'line',
+                data: {
+                    labels: sampleData.cashFlowForecast.map(d => d.date.split('-')[2]),
+                    datasets: [{
+                        label: 'Projected Balance',
+                        data: sampleData.cashFlowForecast.map(d => d.balance),
+                        borderColor: 'var(--accent-info)',
+                        backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                color: 'var(--text-secondary)',
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            },
+                            grid: {
+                                color: 'var(--border-color)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'var(--text-secondary)'
+                            },
+                            grid: {
+                                color: 'var(--border-color)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'var(--text-primary)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Allocation Chart
+            const allocationCtx = document.getElementById('allocationChart').getContext('2d');
+            new Chart(allocationCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['AAPL', 'MSFT', 'GOOGL'],
+                    datasets: [{
+                        data: [4637.50, 5778.00, 22000.00],
+                        backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: 'var(--text-primary)',
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Hero Trend Charts
+            const trendData = [100, 120, 110, 130, 125, 140, 135, 150, 145, 160];
+            
+            ['netWorthTrend', 'cashFlowTrend', 'budgetTrend', 'returnsTrend'].forEach(id => {
+                const ctx = document.getElementById(id).getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: trendData.map((_, i) => i),
+                        datasets: [{
+                            data: trendData,
+                            borderColor: 'var(--accent-positive)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: { display: false }
+                        }
+                    }
+                });
+            });
+        }
+
+        // Populate Tables
+        function populateTables() {
+            // Recent Transactions
+            const recentTbody = document.getElementById('recentTransactions');
+            sampleData.recentTransactions.slice(0, 8).forEach(tx => {
+                const row = document.createElement('tr');
+                const status = tx.amount > 0 ? 'positive' : 'negative';
+                const statusText = tx.amount > 0 ? 'Income' : 'Expense';
+                
+                row.innerHTML = `
+                    <td>${formatDate(tx.date)}</td>
+                    <td>${tx.payee}</td>
+                    <td>${tx.category}</td>
+                    <td style="color: ${tx.amount < 0 ? 'var(--accent-negative)' : 'var(--accent-positive)'}">
+                        ${formatCurrency(tx.amount)}
+                    </td>
+                    <td><span class="status-badge ${status}">${statusText}</span></td>
+                `;
+                recentTbody.appendChild(row);
+            });
+
+            // Recurring Patterns
+            const recurringTbody = document.getElementById('recurringPatterns');
+            sampleData.recurringPatterns.forEach(pattern => {
+                const row = document.createElement('tr');
+                const confidence = pattern.confidence > 0.9 ? 'positive' : pattern.confidence > 0.7 ? 'warning' : 'negative';
+                
+                row.innerHTML = `
+                    <td>${pattern.merchant}</td>
+                    <td>${formatCurrency(pattern.amount)}</td>
+                    <td>${pattern.frequency}</td>
+                    <td>${formatDate(pattern.nextExpected)}</td>
+                    <td><span class="status-badge ${confidence}">${formatPercentage(pattern.confidence * 100)}</span></td>
+                `;
+                recurringTbody.appendChild(row);
+            });
+
+            // Budget Progress
+            const budgetContainer = document.getElementById('budgetProgress');
+            sampleData.budgetProgress.forEach(budget => {
+                const progressBar = document.createElement('div');
+                progressBar.className = 'mb-4';
+                progressBar.innerHTML = `
+                    <div class="flex justify-between mb-2">
+                        <span class="font-semibold">${budget.category}</span>
+                        <span class="text-sm">${formatCurrency(budget.actualSpent)} / ${formatCurrency(budget.budgetAmount)}</span>
+                    </div>
+                    <div style="background: var(--bg-tertiary); border-radius: var(--radius-sm); height: 12px; position: relative;">
+                        <div style="
+                            background: ${budget.overBudget ? 'var(--accent-negative)' : 'var(--accent-positive)'};
+                            width: ${Math.min(budget.progressPercentage, 100)}%;
+                            height: 100%;
+                            border-radius: var(--radius-sm);
+                            transition: var(--transition);
+                            position: relative;
+                        ">
+                            <div style="
+                                position: absolute;
+                                right: 0;
+                                top: 50%;
+                                transform: translateY(-50%);
+                                background: var(--bg-primary);
+                                color: var(--text-primary);
+                                padding: 0.25rem 0.5rem;
+                                border-radius: var(--radius-sm);
+                                font-size: 0.75rem;
+                                font-weight: 600;
+                            ">${formatPercentage(budget.progressPercentage)}</div>
+                        </div>
+                    </div>
+                `;
+                budgetContainer.appendChild(progressBar);
+            });
+        }
+
+        // Populate Chat
+        function populateChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            sampleData.chatMessages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${msg.role}`;
+                messageDiv.innerHTML = `
+                    <div>${msg.content}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                        ${msg.timestamp}
+                    </div>
+                `;
+                chatMessages.appendChild(messageDiv);
+            });
+        }
+
+        // Chat Input
+        const chatInput = document.getElementById('chatInput');
+        const sendMessage = document.getElementById('sendMessage');
+
+        function addMessage(content, role = 'user') {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${role}`;
+            messageDiv.innerHTML = `
+                <div>${content}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                    ${new Date().toLocaleString()}
+                </div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        sendMessage.addEventListener('click', () => {
+            const message = chatInput.value.trim();
+            if (message) {
+                addMessage(message, 'user');
+                chatInput.value = '';
+                
+                // Simulate AI response
+                setTimeout(() => {
+                    addMessage('I\'m analyzing your financial data. This is a demo response showing how the AI assistant would help with your financial questions.', 'assistant');
+                }, 1000);
+            }
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage.click();
+            }
+        });
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            populateTables();
+            populateChat();
+        });
+    </script>
+</body>
+</html>

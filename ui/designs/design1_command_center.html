@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Dashboard - Command Center</title>
+    <link rel="stylesheet" href="assets/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="assets/sample-data.js"></script>
+    <style>
+        /* Design 1 Specific Styles */
+        .layout {
+            display: grid;
+            grid-template-areas: 
+                "header header header"
+                "sidebar main chat";
+            grid-template-columns: 240px 1fr 0px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            transition: var(--transition);
+        }
+
+        .layout.chat-open {
+            grid-template-columns: 240px 1fr 400px;
+        }
+
+        .header {
+            grid-area: header;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-info);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .time-period {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 1rem;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .sidebar {
+            grid-area: sidebar;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .sidebar-nav {
+            list-style: none;
+        }
+
+        .sidebar-nav li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-nav a {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            gap: 0.75rem;
+        }
+
+        .sidebar-nav a:hover,
+        .sidebar-nav a.active {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .main {
+            grid-area: main;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .status-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .status-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .widget-large {
+            grid-column: span 2;
+        }
+
+        .widget-full {
+            grid-column: span 3;
+        }
+
+        .chat-panel {
+            grid-area: chat;
+            background: var(--bg-card);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: var(--transition);
+        }
+
+        .chat-panel.open {
+            transform: translateX(0);
+        }
+
+        .chat-toggle {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--accent-info);
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            z-index: 1000;
+            transition: var(--transition);
+        }
+
+        .chat-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .chat-toggle.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(66, 165, 245, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(66, 165, 245, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(66, 165, 245, 0); }
+        }
+
+        .sparkline {
+            width: 100%;
+            height: 40px;
+            margin-top: 0.5rem;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .quick-action {
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: var(--transition);
+        }
+
+        .quick-action:hover {
+            background: var(--bg-hover);
+            border-color: var(--border-hover);
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .widget-large {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .layout {
+                grid-template-areas: 
+                    "header"
+                    "main";
+                grid-template-columns: 1fr;
+                grid-template-rows: 60px 1fr;
+            }
+            
+            .sidebar {
+                display: none;
+            }
+            
+            .status-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .widget-large,
+            .widget-full {
+                grid-column: span 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout" id="layout">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">💰 FinancePro</div>
+            </div>
+            <div class="header-controls">
+                <select class="time-period" id="timePeriod">
+                    <option value="30d">Last 30 Days</option>
+                    <option value="90d">Last 90 Days</option>
+                    <option value="1y">Last Year</option>
+                    <option value="all">All Time</option>
+                </select>
+                <button class="theme-toggle" id="themeToggle">🌙</button>
+                <button class="btn btn-primary btn-sm">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <ul class="sidebar-nav">
+                <li><a href="#" class="active">📊 Dashboard</a></li>
+                <li><a href="#">💳 Transactions</a></li>
+                <li><a href="#">📈 Investments</a></li>
+                <li><a href="#">🔄 Recurring</a></li>
+                <li><a href="#">⚠️ Anomalies</a></li>
+                <li><a href="#">📊 Forecast</a></li>
+                <li><a href="#">🏦 Transfers</a></li>
+                <li><a href="#">💰 Budgets</a></li>
+                <li><a href="#">🎯 Goals</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-card">
+                    <div class="status-value" style="color: var(--accent-positive)">$125,430</div>
+                    <div class="status-label">Net Worth</div>
+                    <canvas class="sparkline" id="netWorthChart"></canvas>
+                </div>
+                <div class="status-card">
+                    <div class="status-value" style="color: var(--accent-positive)">$2,841</div>
+                    <div class="status-label">Monthly Cash Flow</div>
+                    <canvas class="sparkline" id="cashFlowChart"></canvas>
+                </div>
+                <div class="status-card">
+                    <div class="status-value" style="color: var(--accent-warning)">78.5%</div>
+                    <div class="status-label">Budget Used</div>
+                    <canvas class="sparkline" id="budgetChart"></canvas>
+                </div>
+                <div class="status-card">
+                    <div class="status-value" style="color: var(--accent-positive)">12.4%</div>
+                    <div class="status-label">Investment Returns</div>
+                    <canvas class="sparkline" id="returnsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <a href="#" class="quick-action">🔍 Analyze Anomalies</a>
+                <a href="#" class="quick-action">📊 Generate Forecast</a>
+                <a href="#" class="quick-action">🔄 Detect Transfers</a>
+                <a href="#" class="quick-action">📈 Portfolio Analysis</a>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Spending Breakdown -->
+                <div class="card widget-large">
+                    <div class="card-header">
+                        <h3 class="card-title">Spending by Category</h3>
+                        <button class="btn btn-secondary btn-sm">View Details</button>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="spendingChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Transactions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recent Transactions</h3>
+                        <button class="btn btn-secondary btn-sm">View All</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Payee</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentTransactions">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Cash Flow Forecast -->
+                <div class="card widget-full">
+                    <div class="card-header">
+                        <h3 class="card-title">30-Day Cash Flow Forecast</h3>
+                        <div>
+                            <button class="btn btn-secondary btn-sm">Export</button>
+                            <button class="btn btn-primary btn-sm">Refresh</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recurring Patterns -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recurring Patterns</h3>
+                        <button class="btn btn-secondary btn-sm">Analyze</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Merchant</th>
+                                    <th>Amount</th>
+                                    <th>Next Due</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recurringPatterns">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Budget Progress -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Budget Progress</h3>
+                        <button class="btn btn-secondary btn-sm">Manage</button>
+                    </div>
+                    <div id="budgetProgress">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Investment Portfolio -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Portfolio Summary</h3>
+                        <button class="btn btn-secondary btn-sm">Details</button>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value" style="color: var(--accent-positive)">$45,620</div>
+                        <div class="kpi-label">Total Value</div>
+                        <div class="kpi-change positive">
+                            +$3,620 (+8.6%)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Chat Panel -->
+        <div class="chat-panel" id="chatPanel">
+            <div class="chat-header">
+                <h3>AI Assistant</h3>
+                <button class="btn btn-secondary btn-sm" id="closeChat">✕</button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="chat-input">
+                <input type="text" placeholder="Ask about your finances..." id="chatInput">
+                <button class="btn btn-primary" id="sendMessage">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Toggle Button -->
+    <button class="chat-toggle pulse" id="chatToggle">💬</button>
+
+    <script>
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        });
+
+        // Chat Toggle
+        const chatToggle = document.getElementById('chatToggle');
+        const chatPanel = document.getElementById('chatPanel');
+        const layout = document.getElementById('layout');
+        const closeChat = document.getElementById('closeChat');
+
+        chatToggle.addEventListener('click', () => {
+            layout.classList.toggle('chat-open');
+            chatPanel.classList.toggle('open');
+            chatToggle.classList.toggle('pulse');
+        });
+
+        closeChat.addEventListener('click', () => {
+            layout.classList.remove('chat-open');
+            chatPanel.classList.remove('open');
+            chatToggle.classList.add('pulse');
+        });
+
+        // Initialize Charts
+        function initCharts() {
+            // Spending Chart
+            const spendingCtx = document.getElementById('spendingChart').getContext('2d');
+            new Chart(spendingCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sampleData.spendingCategories.map(cat => cat.name),
+                    datasets: [{
+                        data: sampleData.spendingCategories.map(cat => cat.amount),
+                        backgroundColor: sampleData.spendingCategories.map(cat => cat.color),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: 'var(--text-primary)',
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Forecast Chart
+            const forecastCtx = document.getElementById('forecastChart').getContext('2d');
+            new Chart(forecastCtx, {
+                type: 'line',
+                data: {
+                    labels: sampleData.cashFlowForecast.map(d => d.date.split('-')[2]),
+                    datasets: [{
+                        label: 'Projected Balance',
+                        data: sampleData.cashFlowForecast.map(d => d.balance),
+                        borderColor: 'var(--accent-info)',
+                        backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                color: 'var(--text-secondary)',
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            },
+                            grid: {
+                                color: 'var(--border-color)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'var(--text-secondary)'
+                            },
+                            grid: {
+                                color: 'var(--border-color)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'var(--text-primary)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Sparkline Charts
+            const sparklineData = [100, 120, 110, 130, 125, 140, 135, 150, 145, 160];
+            
+            ['netWorthChart', 'cashFlowChart', 'budgetChart', 'returnsChart'].forEach(id => {
+                const ctx = document.getElementById(id).getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: sparklineData.map((_, i) => i),
+                        datasets: [{
+                            data: sparklineData,
+                            borderColor: 'var(--accent-positive)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: { display: false }
+                        }
+                    }
+                });
+            });
+        }
+
+        // Populate Tables
+        function populateTables() {
+            // Recent Transactions
+            const recentTbody = document.getElementById('recentTransactions');
+            sampleData.recentTransactions.slice(0, 5).forEach(tx => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatDate(tx.date)}</td>
+                    <td>${tx.payee}</td>
+                    <td style="color: ${tx.amount < 0 ? 'var(--accent-negative)' : 'var(--accent-positive)'}">
+                        ${formatCurrency(tx.amount)}
+                    </td>
+                `;
+                recentTbody.appendChild(row);
+            });
+
+            // Recurring Patterns
+            const recurringTbody = document.getElementById('recurringPatterns');
+            sampleData.recurringPatterns.forEach(pattern => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${pattern.merchant}</td>
+                    <td>${formatCurrency(pattern.amount)}</td>
+                    <td>${formatDate(pattern.nextExpected)}</td>
+                `;
+                recurringTbody.appendChild(row);
+            });
+
+            // Budget Progress
+            const budgetContainer = document.getElementById('budgetProgress');
+            sampleData.budgetProgress.forEach(budget => {
+                const progressBar = document.createElement('div');
+                progressBar.className = 'mb-3';
+                progressBar.innerHTML = `
+                    <div class="flex justify-between mb-1">
+                        <span>${budget.category}</span>
+                        <span>${formatCurrency(budget.actualSpent)} / ${formatCurrency(budget.budgetAmount)}</span>
+                    </div>
+                    <div style="background: var(--bg-tertiary); border-radius: var(--radius-sm); height: 8px;">
+                        <div style="
+                            background: ${budget.overBudget ? 'var(--accent-negative)' : 'var(--accent-positive)'};
+                            width: ${Math.min(budget.progressPercentage, 100)}%;
+                            height: 100%;
+                            border-radius: var(--radius-sm);
+                            transition: var(--transition);
+                        "></div>
+                    </div>
+                `;
+                budgetContainer.appendChild(progressBar);
+            });
+        }
+
+        // Populate Chat
+        function populateChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            sampleData.chatMessages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${msg.role}`;
+                messageDiv.innerHTML = `
+                    <div>${msg.content}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                        ${msg.timestamp}
+                    </div>
+                `;
+                chatMessages.appendChild(messageDiv);
+            });
+        }
+
+        // Chat Input
+        const chatInput = document.getElementById('chatInput');
+        const sendMessage = document.getElementById('sendMessage');
+
+        function addMessage(content, role = 'user') {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${role}`;
+            messageDiv.innerHTML = `
+                <div>${content}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                    ${new Date().toLocaleString()}
+                </div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        sendMessage.addEventListener('click', () => {
+            const message = chatInput.value.trim();
+            if (message) {
+                addMessage(message, 'user');
+                chatInput.value = '';
+                
+                // Simulate AI response
+                setTimeout(() => {
+                    addMessage('I\'m analyzing your financial data. This is a demo response.', 'assistant');
+                }, 1000);
+            }
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage.click();
+            }
+        });
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            populateTables();
+            populateChat();
+        });
+    </script>
+</body>
+</html>

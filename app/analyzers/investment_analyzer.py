@@ -31,7 +31,8 @@ class InvestmentAnalyzer:
         """
         
         with self.engine.connect() as conn:
-            conn.execute(create_table_sql)
+            # SQLAlchemy 2.0 requires executable objects for raw SQL
+            conn.exec_driver_sql(create_table_sql)
             conn.commit()
     
     def parse_and_store_investments(self) -> Dict:
@@ -48,8 +49,8 @@ class InvestmentAnalyzer:
             
             # Store in database
             with self.engine.connect() as conn:
-                # Clear existing data
-                conn.execute("DELETE FROM investments")
+                # Clear existing data (use exec_driver_sql for 2.0 compatibility)
+                conn.exec_driver_sql("DELETE FROM investments")
                 
                 # Insert new data
                 df.to_sql('investments', conn, if_exists='append', index=False)

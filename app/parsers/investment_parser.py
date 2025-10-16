@@ -95,9 +95,9 @@ class InvestmentParser:
                             elif line.startswith('T'):
                                 current_transaction['amount'] = line[1:]
                             elif line.startswith('N'):
-                                current_transaction['security'] = line[1:]
-                            elif line.startswith('Y'):
                                 current_transaction['action'] = line[1:]
+                            elif line.startswith('Y'):
+                                current_transaction['security'] = line[1:]
                             elif line.startswith('I'):
                                 current_transaction['price'] = line[1:]
                             elif line.startswith('Q'):
