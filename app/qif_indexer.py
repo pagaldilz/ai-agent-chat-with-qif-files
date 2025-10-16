@@ -11,6 +11,15 @@ class QIFIndexer:
         self.db_path = db_path
         self.logger = logging.getLogger('qif_indexer')
         self.logger.setLevel(logging.INFO)
+        # Import statistics, reset per build
+        self.import_stats = {
+            'files_parsed': 0,
+            'file_names': [],
+            'records_parsed': 0,
+            'records_inserted': 0,
+            'bad_date_count': 0,
+            'bad_amount_count': 0
+        }
         self.engine = create_engine(
             f"sqlite:///{db_path}",
             connect_args={"check_same_thread": False},
@@ -179,12 +188,24 @@ class QIFIndexer:
             """
             Parse all .qif files in the directory and return a Pandas DataFrame.
             """
+            # reset stats for a new parse
+            self.import_stats = {
+                'files_parsed': 0,
+                'file_names': [],
+                'records_parsed': 0,
+                'records_inserted': 0,
+                'bad_date_count': 0,
+                'bad_amount_count': 0
+            }
+
             records = []
             files = [f for f in os.listdir(self.qif_dir) if f.lower().endswith('.qif')]
             self.logger.info(f"Found {len(files)} QIF file(s): {files}")
             for fname in files:
                 path = os.path.join(self.qif_dir, fname)
                 self.logger.info(f"Parsing QIF file: {path}")
+                self.import_stats['files_parsed'] += 1
+                self.import_stats['file_names'].append(fname)
                 with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                     current = {}
                     current_account = {'name': '', 'type': ''}
@@ -208,6 +229,8 @@ class QIFIndexer:
                             # Process and store transaction
                             # Date
                             dt = self.parse_qif_date(current.get('date', '')) if 'date' in current else None
+                            if 'date' in current and dt is None:
+                                self.import_stats['bad_date_count'] += 1
                             # Amount
                             amt = 0.0
                             if 'amount' in current:
@@ -216,6 +239,7 @@ class QIFIndexer:
                                 except Exception as e:
                                     self.logger.warning(f"Bad amount: {current['amount']} in file {fname} ({e})")
                                     amt = 0.0
+                                    self.import_stats['bad_amount_count'] += 1
                             records.append({
                                 'date': dt,
                                 'payee': current.get('payee', ''),
@@ -226,6 +250,7 @@ class QIFIndexer:
                                 'account_name': current_account['name'],
                                 'account_type': current_account['type'],
                             })
+                            self.import_stats['records_parsed'] += 1
                             current = {}
                         elif line.startswith('D'):
                             current['date'] = line[1:]
@@ -240,6 +265,8 @@ class QIFIndexer:
                     # Handle final record if file doesn't end with ^
                     if current:
                         dt = self.parse_qif_date(current.get('date', '')) if 'date' in current else None
+                        if 'date' in current and dt is None:
+                            self.import_stats['bad_date_count'] += 1
                         amt = 0.0
                         if 'amount' in current:
                             try:
@@ -247,6 +274,7 @@ class QIFIndexer:
                             except Exception as e:
                                 self.logger.warning(f"Bad amount: {current['amount']} in file {fname} ({e})")
                                 amt = 0.0
+                                self.import_stats['bad_amount_count'] += 1
                         records.append({
                             'date': dt,
                             'payee': current.get('payee', ''),
@@ -257,6 +285,7 @@ class QIFIndexer:
                             'account_name': current_account['name'],
                             'account_type': current_account['type'],
                         })
+                        self.import_stats['records_parsed'] += 1
             self.logger.info(f"Parsed total {len(records)} transactions")
             df = pd.DataFrame(records)
             return df    
@@ -272,7 +301,9 @@ class QIFIndexer:
         self.create_analyzer_tables()
         # Populate
         df.to_sql('transactions', self.engine, if_exists='append', index=False)
+        self.import_stats['records_inserted'] = int(len(df))
         self.logger.info("Database build complete")
+        return dict(self.import_stats)
 
     def ensure_database(self):
         """Ensure the database file exists and is populated."""

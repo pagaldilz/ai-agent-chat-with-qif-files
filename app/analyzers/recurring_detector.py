@@ -138,28 +138,31 @@ class RecurringDetector:
             conn.execute(text("DELETE FROM recurring_transactions"))
             
             # Insert new patterns
+            insert_sql = """
+            INSERT INTO recurring_transactions 
+            (merchant_pattern, amount_avg, amount_std, frequency_days, frequency_category,
+             last_seen, next_expected, confidence_score, transaction_count, category,
+             account_name, account_type)
+            VALUES (:merchant_pattern, :amount_avg, :amount_std, :frequency_days, :frequency_category,
+                    :last_seen, :next_expected, :confidence_score, :transaction_count, :category,
+                    :account_name, :account_type)
+            """
             for pattern in patterns:
-                insert_sql = """
-                INSERT INTO recurring_transactions 
-                (merchant_pattern, amount_avg, amount_std, frequency_days, frequency_category,
-                 last_seen, next_expected, confidence_score, transaction_count, category,
-                 account_name, account_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """
-                conn.execute(text(insert_sql), (
-                    pattern['merchant_pattern'],
-                    pattern['amount_avg'],
-                    pattern['amount_std'],
-                    pattern['frequency_days'],
-                    pattern['frequency_category'],
-                    pattern['last_seen'],
-                    pattern['next_expected'],
-                    pattern['confidence_score'],
-                    pattern['transaction_count'],
-                    pattern['category'],
-                    pattern['account_name'],
-                    pattern['account_type']
-                ))
+                params = {
+                    'merchant_pattern': pattern['merchant_pattern'],
+                    'amount_avg': pattern['amount_avg'],
+                    'amount_std': pattern['amount_std'],
+                    'frequency_days': pattern['frequency_days'],
+                    'frequency_category': pattern['frequency_category'],
+                    'last_seen': pattern['last_seen'],
+                    'next_expected': pattern['next_expected'],
+                    'confidence_score': pattern['confidence_score'],
+                    'transaction_count': pattern['transaction_count'],
+                    'category': pattern['category'],
+                    'account_name': pattern['account_name'],
+                    'account_type': pattern['account_type'],
+                }
+                conn.execute(text(insert_sql), params)
             
             conn.commit()
             self.logger.info(f"Saved {len(patterns)} recurring patterns to database")

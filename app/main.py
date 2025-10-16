@@ -230,9 +230,13 @@ async def admin_rebuild():
         # Recreate indexer (fresh engine) and rebuild
         global indexer
         indexer = QIFIndexer(qif_dir, db_path)
-        indexer.build_database()
+        stats = indexer.build_database()
         logger.info("Database rebuild complete")
-        return {"status": "ok", "message": "Database rebuilt"}
+        return {
+            "status": "ok",
+            "message": "Database rebuilt",
+            "import_summary": stats
+        }
     except Exception as e:
         logger.exception("Database rebuild failed")
         raise HTTPException(status_code=500, detail=str(e))
