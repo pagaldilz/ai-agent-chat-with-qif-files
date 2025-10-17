@@ -10,3 +10,7 @@ pandas
 openai
 numpy
 scipy
+pdfplumber
+PyPDF2
+camelot-py[cv]
+rapidfuzz

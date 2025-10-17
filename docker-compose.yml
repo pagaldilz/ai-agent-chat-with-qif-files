@@ -12,9 +12,11 @@ services:
     volumes:
       - ./qifs:/qifs:ro    # QIF files mounted read-only
       - ./db:/db          # Database storage
+      - ./docs/fund_pdfs:/docs/fund_pdfs:ro  # PDF files mounted read-only
     environment:
       - QIF_DIR=/qifs
       - DB_PATH=/db/transactions.db
+      - FUND_PDF_DIR=/docs/fund_pdfs
       # LM Studio (default)
       - LLM_PROVIDER=lmstudio
       - LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
@@ -41,9 +43,12 @@ services:
       - "8501:8501"
     depends_on:
       - qif-agent
+    volumes:
+      - ./docs/fund_pdfs:/docs/fund_pdfs:ro  # PDF files mounted read-only
     environment:
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
       - QIF_API_URL=http://qif-agent:8000  # This env will be used in the Streamlit app
+      - FUND_PDF_DIR=/docs/fund_pdfs  # Set the PDF directory path
     build:
        context: ./ui
        dockerfile: Dockerfile

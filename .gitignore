@@ -41,3 +41,5 @@ pytest.ini
 
 *.xls
 *.xlsx
+
+docs/

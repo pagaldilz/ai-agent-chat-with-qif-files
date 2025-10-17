@@ -6,10 +6,10 @@ from datetime import datetime
 
 QIF_API_URL = os.environ.get("QIF_API_URL", "http://qif-agent:8000")
 
-st.set_page_config(page_title="QIF Agent", page_icon="", layout="centered")
+st.set_page_config(page_title="QIF Agent", page_icon="", layout="wide")
 
 # Sidebar navigation
-page = st.sidebar.selectbox("Choose a page", ["Chat", "Recurring Analysis", "Merchant Analysis", "Anomaly Detection", "Cash Flow Forecast", "Investment Portfolio", "Transfer Analysis", "Budget & Goals"])
+page = st.sidebar.selectbox("Choose a page", ["Chat", "Recurring Analysis", "Merchant Analysis", "Anomaly Detection", "Cash Flow Forecast", "Investment Portfolio", "Transfer Analysis", "Budget & Goals", "PDF Debug Viewer"])
 
 if page == "Chat":
     st.title("Chat with My QIF Agent")
@@ -787,3 +787,448 @@ elif page == "Budget & Goals":
                     st.info("No goals created yet. Use the form above to create your first goal.")
         except Exception as e:
             st.error(f"Error loading goals: {e}")
+
+elif page == "PDF Debug Viewer":
+    st.title("PDF Debug Viewer")
+    st.markdown("""
+    This tool helps you debug PDF extraction before ingestion. 
+    Upload a PDF or select from existing fund documents to see what text is extracted.
+    """)
+    
+    # Import required modules for PDF processing
+    try:
+        import pdfplumber
+        import os
+        import re
+        from pathlib import Path
+        
+        st.success("PDF processing modules loaded successfully!")
+        
+        # Simplified PDF processing functions for UI
+        def extract_text_pages(pdf_path):
+            """Extract text from all pages of a PDF"""
+            pages = []
+            try:
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            pages.append(text)
+            except Exception as e:
+                st.error(f"Error extracting text: {e}")
+            return pages
+        
+        def detect_fund_name(pages):
+            """Simple fund name detection"""
+            if not pages:
+                return None
+            
+            # Look for common fund name patterns
+            text = " ".join(pages[:2])  # Check first 2 pages
+            patterns = [
+                r"fund\s+name[:\s]+([A-Za-z\s&,.-]+)",
+                r"([A-Za-z\s&,.-]+)\s+fund",
+                r"([A-Za-z\s&,.-]+)\s+partnership"
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    return match.group(1).strip()
+            return "Unknown Fund"
+        
+        def detect_as_of_date(pages):
+            """Simple date detection"""
+            if not pages:
+                return None
+            
+            text = " ".join(pages[:2])  # Check first 2 pages
+            date_patterns = [
+                r"as\s+of\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+                r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+                r"(\d{4}[/-]\d{1,2}[/-]\d{1,2})"
+            ]
+            
+            for pattern in date_patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    return match.group(1)
+            return None
+        
+        def classify_doc_type(pages):
+            """Simple document type classification"""
+            if not pages:
+                return "Unknown"
+            
+            text = " ".join(pages[:2]).lower()
+            
+            if any(keyword in text for keyword in ["capital call", "drawdown"]):
+                return "Capital Call"
+            elif any(keyword in text for keyword in ["distribution", "capital distribution"]):
+                return "Distribution"
+            elif any(keyword in text for keyword in ["quarterly", "annual", "report"]):
+                return "Report"
+            else:
+                return "Other"
+        
+        def parse_metrics(pages):
+            """Simple metrics parsing"""
+            if not pages:
+                return {}
+            
+            text = " ".join(pages)
+            metrics = {}
+            
+            # Look for NAV
+            nav_match = re.search(r"nav[:\s]*\$?([\d,]+\.?\d*)", text, re.IGNORECASE)
+            if nav_match:
+                try:
+                    metrics["nav"] = float(nav_match.group(1).replace(",", ""))
+                except:
+                    pass
+            
+            # Look for IRR
+            irr_match = re.search(r"irr[:\s]*([\d,]+\.?\d*)%?", text, re.IGNORECASE)
+            if irr_match:
+                try:
+                    metrics["irr"] = float(irr_match.group(1).replace(",", ""))
+                except:
+                    pass
+            
+            return metrics
+        
+        def parse_cash_flows(pages):
+            """Simple cash flow parsing"""
+            if not pages:
+                return []
+            
+            text = " ".join(pages)
+            cash_flows = []
+            
+            # Look for cash flow amounts
+            amount_pattern = r"\$?([\d,]+\.?\d*)\s*(?:million|m|billion|b)?"
+            amounts = re.findall(amount_pattern, text, re.IGNORECASE)
+            
+            for amount in amounts[:10]:  # Limit to first 10 matches
+                try:
+                    value = float(amount.replace(",", ""))
+                    cash_flows.append(value)
+                except:
+                    pass
+            
+            return cash_flows
+        
+        # File selection
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.subheader("Upload New PDF")
+            uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
+            
+        with col2:
+            st.subheader("Select Existing PDF")
+            # Try multiple possible paths for the PDF directory
+            # Get the directory where this Streamlit file is located
+            streamlit_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(streamlit_dir)  # Go up one level from ui/ to project root
+            
+            possible_paths = [
+                os.getenv('FUND_PDF_DIR', 'docs/fund_pdfs'),
+                '/docs/fund_pdfs',  # Docker mount path
+                'docs/fund_pdfs',
+                '../docs/fund_pdfs',
+                './docs/fund_pdfs',
+                os.path.join(os.getcwd(), 'docs', 'fund_pdfs'),
+                os.path.join(project_root, 'docs', 'fund_pdfs'),
+                os.path.join(streamlit_dir, '..', 'docs', 'fund_pdfs'),
+                os.path.join(os.path.dirname(os.getcwd()), 'docs', 'fund_pdfs')
+            ]
+            
+            pdf_dir = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    pdf_dir = path
+                    break
+            
+            # If no directory found, try to create the default one
+            if not pdf_dir:
+                default_path = 'docs/fund_pdfs'
+                try:
+                    os.makedirs(default_path, exist_ok=True)
+                    if os.path.exists(default_path):
+                        pdf_dir = default_path
+                        st.info(f"Created PDF directory: {pdf_dir}")
+                except Exception as e:
+                    st.warning(f"Could not create PDF directory: {e}")
+            
+            if pdf_dir:
+                pdf_files = [f for f in os.listdir(pdf_dir) if f.lower().endswith('.pdf')]
+                if pdf_files:
+                    selected_file = st.selectbox("Choose from existing PDFs", [""] + pdf_files)
+                    st.success(f"✅ Found {len(pdf_files)} PDF files in: {pdf_dir}")
+                    st.info(f"Available PDFs: {', '.join(pdf_files)}")
+                else:
+                    st.info(f"No PDF files found in {pdf_dir}")
+                    selected_file = ""
+            else:
+                st.warning(f"PDF directory not found. Tried paths: {possible_paths}")
+                st.info("You can still upload a PDF using the upload widget on the left.")
+                st.info(f"Current working directory: {os.getcwd()}")
+                st.info(f"Environment FUND_PDF_DIR: {os.getenv('FUND_PDF_DIR', 'Not set')}")
+                selected_file = ""
+        
+        # Process selected file
+        pdf_path = None
+        if uploaded_file:
+            pdf_path = uploaded_file
+            filename = uploaded_file.name
+        elif selected_file:
+            pdf_path = os.path.join(pdf_dir, selected_file)
+            filename = selected_file
+        else:
+            st.info("Please upload a PDF or select an existing one to begin analysis.")
+        
+        if pdf_path:
+            st.divider()
+            st.subheader(f"Analysis: {filename}")
+            
+            try:
+                # Extract text using pdfplumber
+                if uploaded_file:
+                    # For uploaded files, save temporarily
+                    temp_path = f"/tmp/{filename}"
+                    with open(temp_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    pages = extract_text_pages(temp_path)
+                    os.remove(temp_path)
+                else:
+                    pages = extract_text_pages(pdf_path)
+                
+                # Display metadata
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Pages Extracted", len(pages))
+                with col2:
+                    total_chars = sum(len(page) for page in pages)
+                    st.metric("Total Characters", f"{total_chars:,}")
+                with col3:
+                    avg_chars = total_chars // len(pages) if pages else 0
+                    st.metric("Avg Chars/Page", f"{avg_chars:,}")
+                
+                # Run pattern detection
+                st.subheader("Pattern Detection Results")
+                
+                fund_name = detect_fund_name(pages)
+                as_of_date = detect_as_of_date(pages)
+                doc_type = classify_doc_type(pages)
+                metrics = parse_metrics(pages)
+                cash_flows = parse_cash_flows(pages)
+                
+                # Calculate confidence (simplified version)
+                confidence = 0.6
+                if metrics.get("nav") is not None or metrics.get("irr_net") is not None:
+                    confidence += 0.2
+                if as_of_date:
+                    confidence += 0.1
+                confidence = min(confidence, 0.95)
+                
+                # Display results
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Fund Name:**", fund_name)
+                    st.write("**As of Date:**", as_of_date or "Not detected")
+                    st.write("**Document Type:**", doc_type)
+                    st.write("**Confidence Score:**", f"{confidence:.2f}")
+                
+                with col2:
+                    st.write("**Metrics Found:**")
+                    for key, value in metrics.items():
+                        if value is not None:
+                            st.write(f"- {key}: {value}")
+                        else:
+                            st.write(f"- {key}: Not found")
+                    
+                    st.write(f"**Cash Flows:** {len(cash_flows)} detected")
+                
+                # Show extracted text
+                st.subheader("Extracted Text by Page")
+                
+                for i, page_text in enumerate(pages):
+                    with st.expander(f"Page {i+1} ({len(page_text)} characters)"):
+                        if page_text.strip():
+                            st.text(page_text[:2000] + "..." if len(page_text) > 2000 else page_text)
+                        else:
+                            st.warning("No text extracted from this page")
+                
+                # Show what would be sent to LLM
+                st.subheader("LLM Input Preview")
+                llm_text = "\n".join(pages[:3])  # First 3 pages
+                st.text_area("Text that would be sent to LLM:", llm_text[:3000] + "..." if len(llm_text) > 3000 else llm_text, height=200)
+                
+                # Test LLM extraction button
+                if st.button("Test LLM Extraction", type="primary"):
+                    st.subheader("LLM Extraction Results")
+                    
+                    with st.spinner("Calling LLM to extract fund data..."):
+                        try:
+                            # Call the API endpoint for LLM extraction
+                            api_url = f"{QIF_API_URL}/admin/extract-llm"
+                            response = requests.post(api_url, json={"pages": pages}, timeout=120)
+                            
+                            if response.status_code != 200:
+                                st.error(f"API call failed: {response.status_code} - {response.text}")
+                            else:
+                                api_result = response.json()
+                                if api_result.get("status") != "ok":
+                                    st.error(f"LLM extraction failed: {api_result}")
+                                else:
+                                    llm_result = api_result.get("result", {})
+                                    
+                                    # Get LLM config for display
+                                    llm_provider = os.getenv('LLM_PROVIDER', 'lmstudio')
+                                    llm_model = os.getenv('LLM_MODEL', 'phi4-mini:3.8b')
+                                    st.info(f"Using LLM Provider: **{llm_provider}** with model **{llm_model}**")
+                                    
+                                    # Display results
+                                    if llm_result.get("extraction_method") == "llm_failed":
+                                        st.error(f"LLM extraction failed: {llm_result.get('error', 'Unknown error')}")
+                                    else:
+                                        st.success("LLM extraction successful!")
+                                        
+                                        # Comparison table
+                                        col1, col2 = st.columns(2)
+                                        
+                                        with col1:
+                                            st.write("**Pattern Extraction**")
+                                            st.write(f"Fund Name: {fund_name}")
+                                            st.write(f"As of Date: {as_of_date or 'Not detected'}")
+                                            st.write(f"Doc Type: {doc_type}")
+                                            st.write(f"Confidence: {confidence:.2f}")
+                                            st.write("**Metrics:**")
+                                            for key, value in metrics.items():
+                                                if value is not None:
+                                                    st.write(f"- {key}: {value}")
+                                        
+                                        with col2:
+                                            st.write("**LLM Extraction**")
+                                            st.write(f"Fund Name: {llm_result.get('fund_name', 'N/A')}")
+                                            st.write(f"As of Date: {llm_result.get('as_of_date') or 'Not detected'}")
+                                            st.write(f"Doc Type: {llm_result.get('doc_type', 'N/A')}")
+                                            st.write(f"Confidence: {llm_result.get('confidence', 0.0):.2f}")
+                                            st.write("**Metrics:**")
+                                            llm_metrics = llm_result.get('metrics', {})
+                                            for key, value in llm_metrics.items():
+                                                if value is not None:
+                                                    st.write(f"- {key}: {value}")
+                                        
+                                        # Show comprehensive LLM extraction
+                                        comprehensive_data = llm_result.get('comprehensive_data', {})
+                                        if comprehensive_data:
+                                            st.subheader("🔍 Comprehensive LLM Extraction Results")
+                                            
+                                            # Fund Information
+                                            with st.expander("📊 Fund Information", expanded=True):
+                                                col1, col2 = st.columns(2)
+                                                with col1:
+                                                    st.write(f"**Fund Type:** {comprehensive_data.get('fund_type', 'N/A')}")
+                                                    st.write(f"**Fund Manager:** {comprehensive_data.get('fund_manager', 'N/A')}")
+                                                    st.write(f"**Vintage Year:** {comprehensive_data.get('vintage_year', 'N/A')}")
+                                                    st.write(f"**Strategy:** {comprehensive_data.get('strategy', 'N/A')}")
+                                                with col2:
+                                                    st.write(f"**Total Assets:** {comprehensive_data.get('total_assets', 'N/A')}")
+                                                    st.write(f"**Expense Ratio:** {comprehensive_data.get('expense_ratio', 'N/A')}")
+                                                    st.write(f"**Min Investment:** {comprehensive_data.get('minimum_investment', 'N/A')}")
+                                            
+                                            # Performance Metrics
+                                            perf_metrics = comprehensive_data.get('performance_metrics', {})
+                                            if any(perf_metrics.values()):
+                                                with st.expander("📈 Performance Metrics"):
+                                                    col1, col2, col3 = st.columns(3)
+                                                    with col1:
+                                                        st.write("**Returns:**")
+                                                        for key in ['irr_net', 'irr_gross', 'alpha']:
+                                                            if perf_metrics.get(key):
+                                                                st.write(f"- {key}: {perf_metrics[key]}")
+                                                    with col2:
+                                                        st.write("**Multiples:**")
+                                                        for key in ['tvpi', 'dpi', 'rvpi', 'pme']:
+                                                            if perf_metrics.get(key):
+                                                                st.write(f"- {key}: {perf_metrics[key]}")
+                                                    with col3:
+                                                        st.write("**Risk:**")
+                                                        for key in ['volatility', 'max_drawdown', 'tracking_error']:
+                                                            if perf_metrics.get(key):
+                                                                st.write(f"- {key}: {perf_metrics[key]}")
+                                            
+                                            # Asset Allocation
+                                            asset_alloc = comprehensive_data.get('asset_allocation', {})
+                                            if any(asset_alloc.values()):
+                                                with st.expander("🏦 Asset Allocation"):
+                                                    for key, value in asset_alloc.items():
+                                                        if value:
+                                                            st.write(f"- {key.replace('_', ' ').title()}: {value}")
+                                            
+                                            # Fees
+                                            fees = comprehensive_data.get('fees', {})
+                                            if any(fees.values()):
+                                                with st.expander("💰 Fees"):
+                                                    for key, value in fees.items():
+                                                        if value:
+                                                            st.write(f"- {key.replace('_', ' ').title()}: {value}")
+                                            
+                                            # Ratings
+                                            ratings = comprehensive_data.get('ratings', {})
+                                            if any(ratings.values()):
+                                                with st.expander("⭐ Ratings"):
+                                                    for key, value in ratings.items():
+                                                        if value:
+                                                            st.write(f"- {key.replace('_', ' ').title()}: {value}")
+                                            
+                                            # Risk Metrics
+                                            risk_metrics = comprehensive_data.get('risk_metrics', {})
+                                            if any(risk_metrics.values()):
+                                                with st.expander("⚠️ Risk Metrics"):
+                                                    for key, value in risk_metrics.items():
+                                                        if value:
+                                                            st.write(f"- {key.replace('_', ' ').title()}: {value}")
+                                            
+                                            # Additional Info
+                                            additional = comprehensive_data.get('additional_info', {})
+                                            if any(additional.values()):
+                                                with st.expander("ℹ️ Additional Information"):
+                                                    for key, value in additional.items():
+                                                        if value:
+                                                            st.write(f"- {key.replace('_', ' ').title()}: {value}")
+                                        
+                                        # Show cash flows if found
+                                        llm_flows = llm_result.get('cash_flows', [])
+                                        if llm_flows:
+                                            st.write("**LLM Detected Cash Flows:**")
+                                            for flow in llm_flows:
+                                                st.write(f"- {flow[0]}: ${flow[1]:,.2f} ({flow[2]}) - {flow[3]}")
+                                        
+                                        # Winner determination
+                                        st.divider()
+                                        pattern_conf = confidence
+                                        llm_conf = llm_result.get('confidence', 0.0)
+                                        
+                                        if llm_conf > pattern_conf:
+                                            st.success(f"🎯 LLM extraction has higher confidence ({llm_conf:.2f} vs {pattern_conf:.2f}). Recommend using LLM results.")
+                                        else:
+                                            st.info(f"📊 Pattern extraction has higher confidence ({pattern_conf:.2f} vs {llm_conf:.2f}). Recommend using pattern results.")
+                        
+                        except Exception as e:
+                            st.error(f"Error during LLM extraction: {e}")
+                            st.exception(e)
+                
+            except Exception as e:
+                st.error(f"Error processing PDF: {e}")
+                st.exception(e)
+        
+    except ImportError as e:
+        st.error(f"Missing required modules: {e}")
+        st.info("Make sure pdfplumber is installed and the app directory is accessible.")
+    except Exception as e:
+        st.error(f"Error loading PDF processing modules: {e}")
+        st.exception(e)

@@ -6,7 +6,7 @@ import requests
 import logging
 import re
 import json
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query as FastAPIQuery
 from pydantic import BaseModel
 from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
@@ -20,6 +20,7 @@ from app.analyzers.investment_analyzer import InvestmentAnalyzer
 from app.analyzers.transfer_detector import TransferDetector
 from app.analyzers.budget_tracker import BudgetTracker
 from typing import Optional
+from app.parsers.fund_pdf_ingest import ingest_path_report
 
 try:
     # OpenAI SDK (also used for Azure by configuring endpoint and API version)
@@ -256,29 +257,100 @@ def enforce_guardrails(sql: str) -> str:
     return sql
 
 @app.post('/admin/rebuild')
-async def admin_rebuild():
-    """Rebuild the SQLite database from QIF files."""
+async def admin_rebuild(source: str = FastAPIQuery(default="all", description="Source to rebuild: all, qif, or pdf"), dry_run: bool = False, fail_fast: bool = False):
+    """Rebuild the database and/or ingest PDFs.
+    - source: all|qif|pdf
+    - dry_run: apply only to PDF ingestion (no DB writes for PDFs)
+    - fail_fast: stop on first PDF error
+    """
+    # Validate source parameter
+    if source not in ("all", "qif", "pdf"):
+        raise HTTPException(status_code=400, detail="Source must be 'all', 'qif', or 'pdf'")
+    
     try:
-        # Remove existing DB file to force rebuild
-        try:
-            if os.path.exists(db_path):
-                os.remove(db_path)
-        except Exception as e:
-            logger.warning(f"Could not remove existing DB: {e}")
-        # Recreate indexer (fresh engine) and rebuild
-        global indexer
-        indexer = QIFIndexer(qif_dir, db_path)
-        stats = indexer.build_database()
-        logger.info("Database rebuild complete")
-        insights = generate_insights_overview()
-        return {
-            "status": "ok",
-            "message": "Database rebuilt",
-            "import_summary": stats,
-            "insights": insights
-        }
+        response: dict = {"status": "ok"}
+        qif_summary = None
+        pdf_report = None
+
+        if source in ("all", "qif"):
+            # Remove existing DB file to force rebuild (QIF path)
+            try:
+                if os.path.exists(db_path):
+                    os.remove(db_path)
+            except Exception as e:
+                logger.warning(f"Could not remove existing DB: {e}")
+            # Recreate indexer (fresh engine) and rebuild
+            global indexer
+            indexer = QIFIndexer(qif_dir, db_path)
+            qif_summary = indexer.build_database()
+            logger.info("Database rebuild (QIF) complete")
+
+        if source in ("all", "pdf"):
+            # Ingest PDFs into the same DB
+            pdf_dir = os.getenv('FUND_PDF_DIR', 'docs/fund_pdfs')
+            pdf_report = ingest_path_report(db_path=db_path, input_path=pdf_dir, dry_run=dry_run, fail_fast=fail_fast)
+
+        if source in ("all", "qif"):
+            insights = generate_insights_overview()
+            response["insights"] = insights
+
+        if qif_summary is not None:
+            response["import_summary"] = qif_summary
+        if pdf_report is not None:
+            response["pdf_import"] = pdf_report
+        response["message"] = f"Rebuild completed for source={source}"
+        return response
     except Exception as e:
         logger.exception("Database rebuild failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/admin/ingest/fund-docs')
+async def ingest_fund_docs(dry_run: bool = False, fail_fast: bool = False, use_llm: bool = True):
+    """Ingest private fund PDFs only. Returns structured summary and per-file details."""
+    try:
+        # Set environment variable for LLM usage
+        if use_llm:
+            os.environ['FUND_PDF_USE_LLM'] = 'true'
+        else:
+            os.environ['FUND_PDF_USE_LLM'] = 'false'
+            
+        pdf_dir = os.getenv('FUND_PDF_DIR', 'docs/fund_pdfs')
+        report = ingest_path_report(db_path=db_path, input_path=pdf_dir, dry_run=dry_run, fail_fast=fail_fast)
+        return {"status": "ok", "source": "pdf", "use_llm": use_llm, **report}
+    except Exception as e:
+        logger.exception("PDF ingestion failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/admin/extract-llm')
+async def extract_llm_from_text(request: dict):
+    """Extract fund data using LLM from provided text pages."""
+    try:
+        from app.parsers.fund_pdf_ingest import extract_with_llm
+        
+        pages = request.get('pages', [])
+        if not pages:
+            raise HTTPException(status_code=400, detail="No pages provided")
+        
+        # Get LLM config from environment
+        llm_provider = os.getenv('LLM_PROVIDER', 'lmstudio')
+        llm_model = os.getenv('LLM_MODEL', 'phi4-mini:3.8b')
+        ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+        lmstudio_base_url = os.getenv('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1')
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        azure_openai_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+        azure_openai_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+        azure_openai_deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT')
+        
+        # Call LLM extraction
+        result = extract_with_llm(
+            pages, llm_provider, llm_model, ollama_url, lmstudio_base_url,
+            openai_api_key, azure_openai_endpoint, azure_openai_api_key, azure_openai_deployment
+        )
+        
+        return {"status": "ok", "result": result}
+        
+    except Exception as e:
+        logger.exception("LLM extraction failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get('/transactions/{year}')

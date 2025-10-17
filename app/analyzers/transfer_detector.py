@@ -58,6 +58,8 @@ class TransferDetector:
                 
                 if not potential_matches.empty:
                     # Find the best match (closest date and amount)
+                    # Create a copy to avoid SettingWithCopyWarning
+                    potential_matches = potential_matches.copy()
                     potential_matches['date_diff'] = abs((potential_matches['date'] - date).dt.days)
                     potential_matches['amount_diff'] = abs(potential_matches['amount'] + amount)
                     
